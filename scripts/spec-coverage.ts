@@ -39,7 +39,9 @@ export function coverage(specTexts: string[], testTexts: string[]): CoverageRepo
     const gatedSuite = /\bdescribe\.(skipIf|runIf|skip)\(/.test(text);
     for (const m of text.matchAll(title)) {
       const modifier = (m[2] ?? "") || (gatedSuite ? ".skipIf" : "");
-      for (const id of m[3]!.match(ID) ?? []) {
+      // A test covers the IDs its title starts with ("T5.8/T5.9 …"); later mentions are references.
+      const leading = /^\s*(T\d+\.\d+(?:\/T\d+\.\d+)*)/.exec(m[3]!)?.[1] ?? "";
+      for (const id of leading.match(ID) ?? []) {
         present.add(id);
         // skipIf/runIf tests are environment-gated (e2e, docker): report them as pending.
         if (modifier) pending.add(id);

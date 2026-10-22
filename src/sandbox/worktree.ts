@@ -65,6 +65,8 @@ export interface WorktreeProviderOptions {
   secretPaths?: string[];
   /** Environment for the factory's own clone/fetch/push (e.g. gitHubAuthEnv(token)). Never given to agents. */
   gitAuthEnv?: Record<string, string>;
+  /** Called after every successful push (audit log). */
+  onPush?: (branch: string) => void;
 }
 
 interface SnapshotMeta {
@@ -98,13 +100,15 @@ export class SecretLeak extends Error {
 }
 
 export class WorktreeProvider implements SandboxProvider {
-  readonly kind = "worktree";
+  readonly kind: string = "worktree";
   readonly root: string;
   readonly ledger: Ledger;
   private readonly defaultBranch: string;
   private readonly secretPaths: string[];
   /** @internal */
   readonly gitAuthEnv: Record<string, string>;
+  /** @internal */
+  readonly onPush?: (branch: string) => void;
   private readonly locks = new KeyedMutex();
   private secretHashes?: Promise<Set<string>>;
 
@@ -113,6 +117,7 @@ export class WorktreeProvider implements SandboxProvider {
     this.defaultBranch = opts.defaultBranch ?? "main";
     this.secretPaths = (opts.secretPaths ?? []).map((p) => resolve(p));
     this.gitAuthEnv = opts.gitAuthEnv ?? {};
+    this.onPush = opts.onPush;
     this.ledger = new Ledger(join(this.root, "ledger.json"));
   }
 
@@ -149,7 +154,7 @@ export class WorktreeProvider implements SandboxProvider {
       const base = join(dir, "base");
       await gitIn(mirror, "worktree", "add", "-q", "--detach", base, commit);
       for (const cmd of opts.setup) {
-        const r = await execShell(cmd, base, { timeoutSec: 1800 });
+        const r = await this.runSetup(cmd, base);
         if (r.exitCode !== 0) {
           throw new Error(`Snapshot setup failed (${cmd}), exit ${r.exitCode}:\n${r.stderr.slice(-2000)}`);
         }
@@ -164,6 +169,16 @@ export class WorktreeProvider implements SandboxProvider {
       await writeFile(join(dir, "snapshot.json"), JSON.stringify(meta, null, 2));
       return id;
     });
+  }
+
+  /** Runs one snapshot setup command (overridden by providers that run setup elsewhere). */
+  protected runSetup(cmd: string, cwd: string): Promise<ExecResult> {
+    return execShell(cmd, cwd, { timeoutSec: 1800 });
+  }
+
+  /** @internal Path of a snapshot's prepared directory. */
+  snapshotPath(id: SnapshotId): string {
+    return this.snapshotDir(id);
   }
 
   private async snapshotMeta(id: SnapshotId): Promise<SnapshotMeta> {
@@ -304,6 +319,7 @@ class WorktreeSandbox implements Sandbox {
       "origin",
       `HEAD:refs/heads/${branch}`,
     );
+    this.provider.onPush?.(branch);
   }
 
   async destroy(): Promise<void> {

@@ -1,0 +1,31 @@
+name: E2E (real Claude, costs money)
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: "Vitest name filter (e.g. T4.12, T5.11); empty runs the whole e2e project"
+        required: false
+        default: ""
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: npm ci
+      - run: npx vitest run --project e2e ${{ inputs.tests && format('-t "{0}"', inputs.tests) || '' }}
+        env:
+          FACTORY_E2E: "1"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CONTEXT7_API_KEY: ${{ secrets.CONTEXT7_API_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: bench/results.jsonl

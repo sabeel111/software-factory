@@ -11,13 +11,14 @@ export function githubToken(): string | undefined {
 
 export async function createProvider(
   config: FactoryConfig,
-  opts: { token?: string; root?: string; secretPaths?: string[] } = {},
+  opts: { token?: string; root?: string; secretPaths?: string[]; onPush?: (branch: string) => void } = {},
 ): Promise<SandboxProvider> {
   const common = {
     root: opts.root ?? join(tmpdir(), "software-factory"),
     defaultBranch: config.defaultBranch,
     secretPaths: [...config.secretPaths, ...(opts.secretPaths ?? [])],
     gitAuthEnv: opts.token ? gitHubAuthEnv(opts.token) : undefined,
+    onPush: opts.onPush,
   };
   if (config.sandbox.provider === "docker") {
     const { DockerProvider } = await import("../sandbox/docker.js");

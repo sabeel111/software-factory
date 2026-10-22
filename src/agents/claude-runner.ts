@@ -3,7 +3,9 @@
 import { createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { query, type McpServerConfig, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type McpServerConfig, type Options, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+
+type SpawnFn = NonNullable<Options["spawnClaudeCodeProcess"]>;
 import { toJsonSchema } from "../contracts/index.js";
 import {
   AgentFailed,
@@ -58,7 +60,9 @@ export class ClaudeAgentRunner implements AgentRunner {
     }
 
     const tools = [...req.tools];
-    const mcpServers = (req.mcpServers ?? {}) as Record<string, McpServerConfig>;
+    const mcpServers = (
+      req.runtime ? req.runtime.rewriteMcp(req.mcpServers ?? {}) : (req.mcpServers ?? {})
+    ) as Record<string, McpServerConfig>;
     const allowedTools = [...tools, ...Object.keys(mcpServers).map((name) => `mcp__${name}`)];
 
     const q = (this.opts.queryFn ?? query)({
@@ -80,10 +84,12 @@ export class ClaudeAgentRunner implements AgentRunner {
         persistSession: false,
         abortController: abort,
         env: {
-          ...agentEnv(process.env),
+          ...(req.runtime ? req.runtime.env : agentEnv(process.env)),
           ...this.opts.env,
           CLAUDE_AGENT_SDK_CLIENT_APP: "software-factory/0.1",
         },
+        // Container sandboxes run Claude Code itself inside the container, so its tools do too.
+        ...(req.runtime ? { spawnClaudeCodeProcess: req.runtime.spawn as SpawnFn } : {}),
       },
     });
 

@@ -18,6 +18,9 @@ export interface BatchDeps extends Omit<PipelineDeps, "batchBudget" | "signal"> 
   stopAtBudgetFraction?: number;
   /** Observed by tests: called with the number of active pipelines whenever it changes. */
   onActive?: (active: number) => void;
+  /** Shared across repos in a multi-repo run (global concurrency and budget). */
+  sharedSemaphore?: Semaphore;
+  sharedBudget?: Budget;
 }
 
 export interface Unstarted {
@@ -38,9 +41,9 @@ export async function runBatch(deps: BatchDeps): Promise<BatchResult> {
   const started = Date.now();
   const { config } = deps;
   const log = deps.log ?? (() => undefined);
-  const budget = new Budget(config.limits.maxCostUsdPerRun);
-  const stopAt = (deps.stopAtBudgetFraction ?? 0.9) * config.limits.maxCostUsdPerRun;
-  const semaphore = new Semaphore(config.limits.concurrency);
+  const budget = deps.sharedBudget ?? new Budget(config.limits.maxCostUsdPerRun);
+  const stopAt = (deps.stopAtBudgetFraction ?? 0.9) * budget.limitUsd;
+  const semaphore = deps.sharedSemaphore ?? new Semaphore(config.limits.concurrency);
   const results: IssueRunResult[] = [];
   const unstarted: Unstarted[] = [];
   const attempted = new Set<number>();
@@ -147,6 +150,16 @@ export function installSignalHandlers(log: (m: string) => void = console.error):
   };
   process.on("SIGINT", onSigint);
   return { drain, cancel, dispose: () => process.off("SIGINT", onSigint) };
+}
+
+/** Run several repos at once under one global concurrency limit and one budget (R7.5). */
+export async function runRepos(
+  batches: BatchDeps[],
+  global: { concurrency: number; maxCostUsdPerRun: number },
+): Promise<BatchResult[]> {
+  const sharedSemaphore = new Semaphore(global.concurrency);
+  const sharedBudget = new Budget(global.maxCostUsdPerRun);
+  return Promise.all(batches.map((b) => runBatch({ ...b, sharedSemaphore, sharedBudget })));
 }
 
 export { newId };

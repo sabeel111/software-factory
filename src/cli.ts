@@ -110,6 +110,12 @@ export async function main(
     await program.parseAsync(argv, { from: "user" });
   } catch (e) {
     if (e instanceof CommanderError) return e.exitCode;
+    // Expected failures (bad config, missing access) get a clean one-line message.
+    const name = (e as Error).name;
+    if (name === "ConfigError" || name === "GitHubError") {
+      out.err(`factory: ${(e as Error).message}`);
+      return 1;
+    }
     throw e;
   }
   return result.code;

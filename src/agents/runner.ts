@@ -1,6 +1,7 @@
 // AgentRunner: the one seam through which every LLM call passes (specs/01-foundations.md R0.5).
 import type { z } from "zod";
 import type { StageName, Usage } from "../contracts/index.js";
+import type { AgentRuntime } from "../sandbox/types.js";
 
 export type ToolName = "Read" | "Write" | "Edit" | "Glob" | "Grep" | "Bash" | "WebFetch";
 
@@ -26,6 +27,8 @@ export interface AgentRunRequest<T> {
   transcriptPath?: string;
   /** Aborts the agent session (hard cancellation). */
   signal?: AbortSignal;
+  /** Run the agent inside the sandbox (container providers). */
+  runtime?: AgentRuntime;
 }
 
 export interface AgentRunResult<T> {

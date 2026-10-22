@@ -131,7 +131,7 @@ export async function integrate(
           input,
           outputSchema: ConflictResolution,
           cwd: box.path,
-          tools: WORKER_TOOLS,
+          tools: WORKER_TOOLS.filter((t) => !config.blockedTools.includes(t)),
           model: config.stages.integrator.model,
           effort: config.stages.integrator.effort,
           maxTurns: config.stages.integrator.maxTurns,
@@ -142,6 +142,7 @@ export async function integrate(
             `integrator-${issue}-${attempt}.jsonl`,
           ),
           signal: deps.signal,
+          runtime: box.agentRuntime?.(),
         });
         budget.charge(r.costUsd);
         return { output: r.output, cost: r.costUsd };

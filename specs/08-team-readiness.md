@@ -17,7 +17,7 @@ people who don't use the CLI.
 
 | ID | Requirement |
 |----|-------------|
-| R7.1 | A `docker` SandboxProvider implements the Phase 2 interface. Snapshots are images built once per `(repo, ref, setup)`. It passes the entire Phase 2 test suite unchanged. |
+| R7.1 | A `docker` SandboxProvider implements the Phase 2 interface. A snapshot is prepared once per `(repo, ref, setup)` — the checkout on the host, with `setup` run *inside* a container behind the gateway — and each sandbox is one container from the configured image with its worktree bind-mounted. The agent process itself runs in the container (Agent SDK `spawnClaudeCodeProcess`). It passes the entire Phase 2 test suite unchanged. |
 | R7.2 | An optional cloud provider (Upstash Box or equivalent) implements the same interface, behind a config flag. It passes the Phase 2 suite in an opt-in CI job. |
 | R7.3 | **Egress allowlist:** container sandboxes can reach only the configured hosts (default: the package registry, the Anthropic API, Context7, the git remote). Everything else is blocked. |
 | R7.4 | **Credential isolation:** API keys (Anthropic, Context7, GitHub) are injected by a host-side proxy at egress. They never appear in the sandbox environment, filesystem, or agent context. |

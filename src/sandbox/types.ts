@@ -34,6 +34,22 @@ export interface SandboxProvider {
   warnings(): string[];
 }
 
+/** How to run an agent *inside* a sandbox (container providers); absent means "on the host". */
+export interface AgentRuntime {
+  /** Spawns the Claude Code process (Agent SDK `spawnClaudeCodeProcess`). */
+  spawn: (options: {
+    command: string;
+    args: string[];
+    cwd?: string;
+    env: Record<string, string | undefined>;
+    signal?: AbortSignal;
+  }) => unknown;
+  /** The complete environment for the agent process (replaces the host environment). */
+  env: Record<string, string>;
+  /** Rewrites MCP server configs so they route through the sandbox's gateway. */
+  rewriteMcp: (servers: Record<string, unknown>) => Record<string, unknown>;
+}
+
 export interface Sandbox {
   readonly id: string;
   /** Absolute working directory. */
@@ -48,6 +64,8 @@ export interface Sandbox {
   /** Push HEAD to `branch` on the remote. Only `factory/*` branches, never the default branch. */
   push(branch: string): Promise<void>;
   destroy(): Promise<void>;
+  /** Present when agents must run inside the sandbox rather than on the host. */
+  agentRuntime?(): AgentRuntime;
 }
 
 export const PUSH_PREFIX = "factory/";

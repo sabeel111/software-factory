@@ -146,13 +146,15 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     attempt: number,
     schema: z.ZodType<T>,
     input: unknown,
-    cwd: string,
+    box: Sandbox,
     tools: readonly ToolName[],
     mcpServers?: Record<string, unknown>,
   ): Promise<T> {
+    const cwd = box.path;
     checkpoint(`${stage} attempt ${attempt}`);
     deps.onProgress?.(record, stage, attempt);
     const settings = (config.stages as Record<string, StageConfig>)[stage]!;
+    const allowedTools = tools.filter((t) => !config.blockedTools.includes(t));
     const startedAt = new Date().toISOString();
     const t0 = Date.now();
     const entry: StageRecord = {
@@ -173,7 +175,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         input,
         outputSchema: schema,
         cwd,
-        tools,
+        tools: allowedTools,
         model: settings.model,
         effort: settings.effort,
         maxTurns: settings.maxTurns,
@@ -182,6 +184,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         mcpServers,
         transcriptPath: join(store.artifactDir(deps.batchId, runId), `${stage}-${attempt}.jsonl`),
         signal: deps.signal,
+        runtime: box.agentRuntime?.(),
       });
       budget.charge(r.costUsd);
       Object.assign(entry, { costUsd: r.costUsd, tokens: r.usage, output: r.output });
@@ -229,7 +232,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
       1,
       TriageResult,
       { issue, repository: { defaultBranch: config.defaultBranch, checks: config.checks } },
-      triageBox.path,
+      triageBox,
       READ_ONLY_TOOLS,
     );
     await triageBox.destroy();
@@ -265,7 +268,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
             checks: config.checks,
             ...(feedback ? { feedback } : {}),
           },
-          workBox.path,
+          workBox,
           WORKER_TOOLS,
           deps.workerMcpServers,
         );
@@ -332,7 +335,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
             checks: verification.checks.map((c) => ({ name: c.name, exitCode: c.exitCode })),
           },
         },
-        cleanBox.path,
+        cleanBox,
         READ_ONLY_TOOLS,
       );
       await cleanBox.destroy();

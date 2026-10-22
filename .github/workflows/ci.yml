@@ -21,3 +21,17 @@ jobs:
       - run: npm run typecheck
       - run: npx vitest run --project unit --project integ --project contract
       - run: npm run spec:coverage
+
+  docker:
+    # Phase 7: the Phase 2 sandbox contract plus egress/credential isolation, in real containers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: git config --global user.email ci@example.com && git config --global user.name ci
+      - run: npm ci
+      - run: docker pull node:22
+      - run: npx vitest run test/docker.integ.test.ts

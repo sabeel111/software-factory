@@ -1,7 +1,7 @@
 // Factory configuration: schema, defaults and loading (specs/00-overview.md §6).
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
@@ -75,6 +75,8 @@ export const RepoConfig = z.object({
     }),
   prMode: z.enum(["individual", "integrated"]).default("integrated"),
   docs: z.object({ context7: z.boolean().default(true) }).default({ context7: true }),
+  /** Agent tools that must never be granted (set by org policy). */
+  blockedTools: z.array(z.string()).default([]),
 });
 
 export const FactoryConfig = RepoConfig.extend({
@@ -103,6 +105,61 @@ export function parseConfig(raw: unknown): FactoryConfig {
     throw new ConfigError(`Invalid factory config:\n${lines.join("\n")}`);
   }
   return result.data;
+}
+
+/** Each repo of a multi-repo config, with top-level settings inherited where the repo doesn't set them. */
+export function resolveRepos(config: FactoryConfig): FactoryConfig[] {
+  if (!config.repos?.length) return [config];
+  const { repos, ...top } = config;
+  return repos.map((r, i) => {
+    const merged = { ...top, ...r, limits: { ...top.limits, ...((r.limits as object) ?? {}) } };
+    const parsed = FactoryConfig.safeParse(merged);
+    if (!parsed.success) {
+      const lines = parsed.error.issues.map((x) => `  repos.${i}.${x.path.join(".")}: ${x.message}`);
+      throw new ConfigError(`Invalid factory config:\n${lines.join("\n")}`);
+    }
+    return parsed.data;
+  });
+}
+
+// ── Org policy (specs/08-team-readiness.md R7.8) ─────────────────────────────
+
+export const Policy = z.object({
+  /** Upper bounds: a repo may set lower limits, never higher. */
+  limits: Limits.partial().default({}),
+  /** Added to every repo's protected paths. */
+  protectedPaths: z.array(z.string()).default([]),
+  /** Tools no agent may use. */
+  blockedTools: z.array(z.string()).default([]),
+});
+export type Policy = z.infer<typeof Policy>;
+
+export function definePolicy(policy: z.input<typeof Policy>): z.input<typeof Policy> {
+  return policy;
+}
+
+export function applyPolicy(config: FactoryConfig, policyInput: z.input<typeof Policy>): FactoryConfig {
+  const policy = Policy.parse(policyInput);
+  const limits = { ...config.limits };
+  for (const [k, cap] of Object.entries(policy.limits) as [keyof Limits, number][]) {
+    if (cap !== undefined) limits[k] = Math.min(limits[k], cap);
+  }
+  return {
+    ...config,
+    limits,
+    protectedPaths: [...new Set([...config.protectedPaths, ...policy.protectedPaths])],
+    blockedTools: [...new Set([...config.blockedTools, ...policy.blockedTools])],
+  };
+}
+
+async function importDefault(abs: string): Promise<unknown> {
+  const { tsImport } = await import("tsx/esm/api");
+  const mod = (await tsImport(pathToFileURL(abs).href, import.meta.url)) as { default?: unknown };
+  let raw = mod.default;
+  if (raw && typeof raw === "object" && "default" in raw && Object.keys(raw).length === 1) {
+    raw = (raw as { default: unknown }).default;
+  }
+  return raw;
 }
 
 /** Stage-setting overrides owned by the Improver; they live with the playbooks (its only mutable surface). */
@@ -151,5 +208,10 @@ export async function loadConfig(
     if (raw && typeof raw === "object" && "default" in raw && !("repo" in raw))
       raw = (raw as { default: unknown }).default;
   }
-  return applyStageOverrides(parseConfig(raw), await readStageOverrides(playbooksDir));
+  let config = applyStageOverrides(parseConfig(raw), await readStageOverrides(playbooksDir));
+  // The org policy sits next to the config and always wins (repo config can't override it).
+  const policyPath = resolve(dirname(abs), "factory.policy.ts");
+  if (existsSync(policyPath))
+    config = applyPolicy(config, (await importDefault(policyPath)) as z.input<typeof Policy>);
+  return config;
 }
