@@ -20,6 +20,7 @@ import type { Sandbox, SandboxProvider, SnapshotId } from "../sandbox/types.js";
 import type { RunStore } from "../store/run-store.js";
 import { Budget, BudgetExceeded } from "./budget.js";
 import type { Playbooks } from "./playbooks.js";
+import { clip, compactResult, type EventSink } from "../events/types.js";
 import { issuePrBody, type PrSink } from "./pr.js";
 import { verify } from "./verifier.js";
 
@@ -45,6 +46,8 @@ export interface PipelineDeps {
   heartbeatMs?: number;
   signal?: AbortSignal;
   log?: (message: string) => void;
+  /** Structured event stream for the control UI (specs/09-control-ui.md). */
+  events?: EventSink;
   /** Progress callback for `factory status` / live display. */
   onProgress?: (record: RunRecord, stage: StageName | "done", attempt: number) => void;
 }
@@ -97,17 +100,25 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     stages: [],
   };
 
+  const emit = deps.events ?? (() => undefined);
   const claim = await deps.issues.claim(issue.number, runId);
   if (!claim.won) {
     log(`#${issue.number}: lost claim to ${claim.holder ?? "another run"}`);
+    emit({
+      type: "issue.skipped",
+      issue: issue.number,
+      reason: `claimed by ${claim.holder ?? "another run"}`,
+    });
     return { record, outcome: "lost_claim" };
   }
   if (!(await deps.issues.isEligible(issue.number))) {
     // Another run finished it between our listing and our claim.
     await deps.issues.release(issue.number, runId, "abandoned");
     log(`#${issue.number}: no longer ready; skipping`);
+    emit({ type: "issue.skipped", issue: issue.number, reason: "no longer ready" });
     return { record, outcome: "lost_claim" };
   }
+  emit({ type: "issue.claimed", issue: issue.number, title: issue.title, runId });
 
   const budget = deps.batchBudget
     ? deps.batchBudget.child(config.limits.maxCostUsdPerIssue)
@@ -153,6 +164,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     const cwd = box.path;
     checkpoint(`${stage} attempt ${attempt}`);
     deps.onProgress?.(record, stage, attempt);
+    emit({ type: "stage.started", issue: issue.number, stage, attempt });
     const settings = (config.stages as Record<string, StageConfig>)[stage]!;
     const allowedTools = tools.filter((t) => !config.blockedTools.includes(t));
     const startedAt = new Date().toISOString();
@@ -185,6 +197,8 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         transcriptPath: join(store.artifactDir(deps.batchId, runId), `${stage}-${attempt}.jsonl`),
         signal: deps.signal,
         runtime: box.agentRuntime?.(),
+        onActivity: (a) =>
+          emit({ type: "agent.activity", issue: issue.number, stage, attempt, ...a, detail: clip(a.detail) }),
       });
       budget.charge(r.costUsd);
       Object.assign(entry, { costUsd: r.costUsd, tokens: r.usage, output: r.output });
@@ -198,6 +212,17 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     } finally {
       entry.durationMs = Date.now() - t0;
       record.stages.push(entry);
+      emit({
+        type: "stage.finished",
+        issue: issue.number,
+        stage,
+        attempt,
+        durationMs: entry.durationMs,
+        costUsd: entry.costUsd,
+        ok: !entry.error,
+        result: compactResult(entry.output),
+        error: entry.error ? clip(entry.error, 400) : undefined,
+      });
       await persist();
     }
   }
@@ -221,6 +246,14 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     await persist();
     if (!released) await release(releaseAs);
     deps.onProgress?.(record, "done", 0);
+    emit({
+      type: "issue.finished",
+      issue: issue.number,
+      outcome,
+      costUsd: budget.spent,
+      prUrl: record.prUrl,
+      branch: record.branch,
+    });
     return { record, outcome };
   };
 
@@ -294,6 +327,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
 
       checkpoint(`verifier attempt ${attempt}`);
       deps.onProgress?.(record, "verifier", attempt);
+      emit({ type: "stage.started", issue: issue.number, stage: "verifier", attempt });
       const t0 = Date.now();
       const { result: verification, sandbox: cleanBox } = await verify({
         provider: deps.provider,
@@ -306,6 +340,32 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         label: `${issue.number}-verify-${attempt}`,
       });
       sandboxes.push(cleanBox);
+      for (const c of verification.checks) {
+        emit({
+          type: "verifier.check",
+          issue: issue.number,
+          attempt,
+          name: c.name,
+          exitCode: c.exitCode,
+          durationMs: c.durationMs,
+          tests: verification.testSummary,
+          outputTail: c.outputTail.slice(-1500),
+        });
+      }
+      emit({
+        type: "stage.finished",
+        issue: issue.number,
+        stage: "verifier",
+        attempt,
+        durationMs: Date.now() - t0,
+        costUsd: 0,
+        ok: verification.status === "pass",
+        result: {
+          status: verification.status,
+          testSummary: verification.testSummary,
+          commitSha: verification.commitSha,
+        },
+      });
       await codeStage("verifier", attempt, verification, Date.now() - t0);
       if (verification.status !== "pass") {
         lastFailure = `verification ${verification.status}: ${verification.checks

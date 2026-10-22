@@ -17,6 +17,7 @@ import { TriageResult } from "../contracts/index.js";
 import { ClaimingIssueSource } from "../issues/claims.js";
 import { MemoryBackend } from "../issues/memory.js";
 import { runBatch, type BatchResult } from "../orchestrator/batch.js";
+import type { EventSink } from "../events/types.js";
 import { DEFAULT_PLAYBOOK_DIR, DirPlaybooks, type Playbooks } from "../pipeline/playbooks.js";
 import { MemoryPrSink } from "../pipeline/pr.js";
 import { WorktreeProvider } from "../sandbox/worktree.js";
@@ -65,6 +66,12 @@ export interface EvaluateOptions {
   label?: string;
   record?: boolean;
   log?: (m: string) => void;
+  /** Live events (the control UI shows benchmark runs on the floor). */
+  events?: EventSink;
+  batchId?: string;
+  /** Where to append the result (default bench/results.jsonl). */
+  resultsFile?: string;
+  signal?: AbortSignal;
 }
 
 export function benchConfig(
@@ -99,7 +106,7 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
       BENCH_REPO_NAME,
       issues.map((i) => ({ number: i.number, title: i.title, body: i.body, labels: i.labels })),
     );
-    const batchId = newId("bench-");
+    const batchId = opts.batchId ?? newId("bench-");
     const store = new RunStore(opts.runsRoot ?? "runs");
     const playbooks = opts.playbooks ?? new DirPlaybooks(opts.playbooksDir);
     const batch = await runBatch({
@@ -117,6 +124,8 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
       playbookHash: await playbookHash(opts.playbooksDir),
       heartbeatMs: 60_000,
       log: opts.log,
+      events: opts.events,
+      cancel: opts.signal,
     });
 
     const triage: Record<number, "accept" | "reject"> = {};
@@ -162,20 +171,23 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
       issues,
     };
     if (opts.record ?? true) {
-      await appendResult({
-        at: new Date().toISOString(),
-        label: opts.label ?? "factory",
-        factoryVersion: factoryVersion(),
-        playbookHash: await playbookHash(opts.playbooksDir),
-        models: Object.fromEntries(
-          Object.entries(config.stages).map(([k, v]) => [k, `${v.model}@${v.effort}`]),
-        ),
-        costUsd: batch.costUsd,
-        split,
-        score,
-        falsePassRate,
-        wallClockMs: batch.wallClockMs,
-      });
+      await appendResult(
+        {
+          at: new Date().toISOString(),
+          label: opts.label ?? "factory",
+          factoryVersion: factoryVersion(),
+          playbookHash: await playbookHash(opts.playbooksDir),
+          models: Object.fromEntries(
+            Object.entries(config.stages).map(([k, v]) => [k, `${v.model}@${v.effort}`]),
+          ),
+          costUsd: batch.costUsd,
+          split,
+          score,
+          falsePassRate,
+          wallClockMs: batch.wallClockMs,
+        },
+        opts.resultsFile,
+      );
     }
     return run;
   } finally {

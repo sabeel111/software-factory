@@ -57,6 +57,16 @@ const COMMANDS: CommandSpec[] = [
     options: [["--runs <dir>", "run store directory", "runs"]],
   },
   {
+    name: "serve",
+    description: "Serve the control UI (start/drain/cancel batches, live observation)",
+    options: [
+      ["-c, --config <path>", "config file", "factory.config.ts"],
+      ["--port <port>", "port", "4173"],
+      ["--demo", "zero-cost demo: scripted agents on the TinyLinks benchmark", false],
+      ["--speed <factor>", "demo pace multiplier (1 = normal, 0.2 = fast)", "1"],
+    ],
+  },
+  {
     name: "dashboard",
     description: "Serve the read-only web dashboard",
     options: [

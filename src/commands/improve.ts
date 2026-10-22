@@ -7,11 +7,12 @@ import { BENCH_ROOT, loadIssues } from "../bench/benchmark.js";
 import { benchmarkOnce, type BenchRun } from "../bench/run-factory.js";
 import type { BenchResultEntry } from "../bench/score.js";
 import { registerCommand } from "../cli.js";
-import { loadConfig } from "../config.js";
+import { loadConfig, type FactoryConfig } from "../config.js";
+import type { EventSink } from "../events/types.js";
 import type { EvalScores } from "../improve/candidate.js";
 import { fromBenchRun, isVisible } from "../improve/collect.js";
 import { History } from "../improve/history.js";
-import { improve, revertCandidate, type Promoter } from "../improve/improve.js";
+import { improve, revertCandidate, type ImproveReport, type Promoter } from "../improve/improve.js";
 import { GitPromoter } from "../improve/promoter.js";
 import { GitHubClient } from "../issues/github.js";
 import { LABELS } from "../issues/types.js";
@@ -49,8 +50,15 @@ async function cachedChampion(hash: string): Promise<EvalScores[]> {
   }));
 }
 
-registerCommand("improve", async (opts) => {
-  const config = await loadConfig(String(opts.config));
+export interface ImproveRunOptions {
+  maxUsd: number;
+  log: (m: string) => void;
+  events?: EventSink;
+  batchId?: string;
+  signal?: AbortSignal;
+}
+
+function improveTooling(config: FactoryConfig) {
   const token = githubToken();
   const gh = config.selfRepo && token ? new GitHubClient({ token, repo: config.selfRepo }) : undefined;
   const promoter: Promoter = new GitPromoter({
@@ -61,30 +69,38 @@ registerCommand("improve", async (opts) => {
     gitEnv: token ? gitHubAuthEnv(token) : undefined,
   });
   const history = new History(join(DEFAULT_PLAYBOOK_DIR, "HISTORY.jsonl"));
+  return { gh, promoter, history };
+}
 
-  if (opts.revert) {
-    const url = await revertCandidate(String(opts.revert), history, promoter);
-    console.log(`Revert proposed: ${url}`);
-    return 0;
-  }
+export function revertImprovement(config: FactoryConfig, candidateId: string): Promise<string> {
+  const { promoter, history } = improveTooling(config);
+  return revertCandidate(candidateId, history, promoter);
+}
 
+/** The real self-improvement loop (real Claude, real benchmark runs). Shared by the CLI and the UI. */
+export async function runImprove(config: FactoryConfig, opts: ImproveRunOptions): Promise<ImproveReport> {
+  const { gh, promoter, history } = improveTooling(config);
   const repeat = 3;
   const hash = await playbookHash();
   const champion = (await cachedChampion(hash)).slice(-repeat);
   const benchIssues = await loadIssues();
-  const report = await improve({
+  const live = { events: opts.events, batchId: opts.batchId, signal: opts.signal, log: opts.log };
+  return improve({
     runner: new ClaudeAgentRunner(),
     retro: config.stages.retro,
     playbooksDir: DEFAULT_PLAYBOOK_DIR,
     history,
     promoter,
-    maxUsd: Number(opts.maxUsd ?? 30),
+    maxUsd: opts.maxUsd,
     repeat,
     championScores: champion.length ? champion : undefined,
-    log: (m) => console.log(m),
+    log: opts.log,
+    onActivity: opts.events
+      ? (a) => opts.events!({ type: "agent.activity", issue: 0, stage: "retro", attempt: 1, ...a })
+      : undefined,
     collect: async (budget) => {
-      console.log("Collecting: train-split benchmark run with the current playbooks…");
-      const run = await benchmarkOnce({ split: "train", label: "improve:collect" });
+      opts.log("Collecting: train-split benchmark run with the current playbooks…");
+      const run = await benchmarkOnce({ split: "train", label: "improve:collect", ...live });
       budget.charge(run.costUsd);
       const real = (await new RunStore().all())
         .filter((r) => r.issue.repo !== "bench/tinylinks")
@@ -92,20 +108,32 @@ registerCommand("improve", async (opts) => {
       return [...fromBenchRun(run), ...real];
     },
     evaluate: async ({ playbooksDir }) => {
-      console.log("Evaluating on holdout…");
-      return toScores(await benchmarkOnce({ split: "holdout", playbooksDir, label: "improve:eval" }));
+      opts.log("Evaluating on holdout…");
+      return toScores(
+        await benchmarkOnce({ split: "holdout", playbooksDir, label: "improve:eval", ...live }),
+      );
     },
     fileSelfIssue: gh
       ? async (title, body) => void (await gh.createIssue({ title, body, labels: [LABELS.self] }))
-      : async (title) => console.log(`Suggested factory issue (no selfRepo configured): ${title}`),
+      : async (title) => opts.log(`Suggested factory issue (no selfRepo configured): ${title}`),
   });
+}
 
+registerCommand("improve", async (opts) => {
+  const config = await loadConfig(String(opts.config));
+  if (opts.revert) {
+    const url = await revertImprovement(config, String(opts.revert));
+    console.log(`Revert proposed: ${url}`);
+    return 0;
+  }
+  const maxUsd = Number(opts.maxUsd ?? 30);
+  const report = await runImprove(config, { maxUsd, log: (m) => console.log(m) });
   console.log(
     `\nFailure clusters: ${report.clusters.map((c) => `${c.code}×${c.count}`).join(", ") || "none"}`,
   );
   for (const c of report.candidates) {
     console.log(`- ${c.candidateId}: ${c.decision}${c.prUrl ? ` → ${c.prUrl}` : ""}\n  ${c.hypothesis}`);
   }
-  console.log(`Spent $${report.spentUsd.toFixed(2)} of $${Number(opts.maxUsd ?? 30).toFixed(2)}`);
+  console.log(`Spent $${report.spentUsd.toFixed(2)} of $${maxUsd.toFixed(2)}`);
   return 0;
 });

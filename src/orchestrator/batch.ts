@@ -18,6 +18,8 @@ export interface BatchDeps extends Omit<PipelineDeps, "batchBudget" | "signal"> 
   stopAtBudgetFraction?: number;
   /** Observed by tests: called with the number of active pipelines whenever it changes. */
   onActive?: (active: number) => void;
+  /** Called when an issue starts, with a function that cancels just that issue. */
+  onRunStarted?: (issue: number, cancel: () => void) => void;
   /** Shared across repos in a multi-repo run (global concurrency and budget). */
   sharedSemaphore?: Semaphore;
   sharedBudget?: Budget;
@@ -63,6 +65,21 @@ export async function runBatch(deps: BatchDeps): Promise<BatchResult> {
     return null;
   };
 
+  const emit = deps.events ?? (() => undefined);
+  const initial = (await deps.issues.listReady()).filter((i) => !deps.only || deps.only.includes(i.number));
+  emit({
+    type: "batch.started",
+    repo: config.repo,
+    mode: config.prMode,
+    limits: {
+      concurrency: config.limits.concurrency,
+      maxCostUsdPerRun: budget.limitUsd,
+      maxCostUsdPerIssue: config.limits.maxCostUsdPerIssue,
+      maxWorkerAttempts: config.limits.maxWorkerAttempts,
+    },
+    queued: initial.map((i) => ({ number: i.number, title: i.title, labels: i.labels })),
+  });
+
   const nextIssue = async (): Promise<IssueRef | undefined> => {
     const ready = await deps.issues.listReady();
     return ready.find((i) => !attempted.has(i.number) && (!deps.only || deps.only.includes(i.number)));
@@ -90,7 +107,10 @@ export async function runBatch(deps: BatchDeps): Promise<BatchResult> {
     active++;
     deps.onActive?.(active);
     const runId = newId(`r${issue.number}-`);
-    const p = runIssue(issue, runId, { ...deps, batchBudget: budget, signal: deps.cancel })
+    const own = new AbortController();
+    deps.onRunStarted?.(issue.number, () => own.abort());
+    const signal = deps.cancel ? AbortSignal.any([deps.cancel, own.signal]) : own.signal;
+    const p = runIssue(issue, runId, { ...deps, batchBudget: budget, signal })
       .then((r) => {
         results.push(r);
         // A run that didn't open a PR gives its slot back.
@@ -120,6 +140,8 @@ export async function runBatch(deps: BatchDeps): Promise<BatchResult> {
   if (config.prMode === "integrated" && approved.length > 0 && !deps.cancel?.aborted) {
     integration = await integrate(approved, { ...deps, budget, signal: deps.cancel });
   }
+  for (const u of unstarted) emit({ type: "issue.skipped", issue: u.issue, reason: u.reason });
+  emit({ type: "batch.finished", costUsd: budget.spent, unstarted });
 
   return {
     batchId: deps.batchId,

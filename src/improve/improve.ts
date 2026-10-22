@@ -3,7 +3,7 @@
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentRunner } from "../agents/runner.js";
+import type { AgentActivity, AgentRunner } from "../agents/runner.js";
 import { noiseBand as spread } from "../bench/score.js";
 import type { StageConfig, StageOverrides } from "../config.js";
 import type { RunRecord } from "../contracts/index.js";
@@ -63,6 +63,8 @@ export interface ImproveDeps {
   championScores?: EvalScores[];
   fileSelfIssue?: (title: string, body: string) => Promise<void>;
   log?: (m: string) => void;
+  /** Live retrospective activity for the control UI. */
+  onActivity?: (a: AgentActivity) => void;
 }
 
 export interface CandidateReport {
@@ -160,9 +162,11 @@ export async function improve(deps: ImproveDeps): Promise<ImproveReport> {
       model: deps.retro.model,
       effort: deps.retro.effort,
       maxBudgetUsd: budget.remaining,
+      onActivity: deps.onActivity,
     });
     budget.charge(r.costUsd);
     retro = r.output;
+    log(`Retrospective proposed ${retro.candidates.length} candidate(s)`);
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }

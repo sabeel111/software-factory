@@ -14,7 +14,9 @@
     "rootDir": ".",
     "types": [
       "node"
-    ]
+    ],
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
   "include": [
     "src",

@@ -29,6 +29,15 @@ export interface AgentRunRequest<T> {
   signal?: AbortSignal;
   /** Run the agent inside the sandbox (container providers). */
   runtime?: AgentRuntime;
+  /** Live, summarised agent activity (tool calls, text, tool errors) for the observation layer. */
+  onActivity?: (a: AgentActivity) => void;
+}
+
+export interface AgentActivity {
+  kind: "text" | "tool" | "result";
+  tool?: string;
+  detail: string;
+  isError?: boolean;
 }
 
 export interface AgentRunResult<T> {

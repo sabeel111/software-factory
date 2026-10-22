@@ -1,7 +1,7 @@
 # Phase Status
 
 Updated at the end of each phase (see Overview §10, Definition of done).
-Last update: 2026-10-22.
+Last update: 2026-10-22 (Phase 8).
 
 | Phase | Spec | Status | Tests (run here) | Gated tests (need a real service) |
 |-------|------|--------|------------------|-----------------------------------|
@@ -13,8 +13,9 @@ Last update: 2026-10-22.
 | 5 | [Parallel & integration](./06-parallel-and-integration.md) | ✅ Built; benchmark run pending | 10 / 11 | T5.11 (real Claude) |
 | 6 | [Self-improvement](./07-self-improvement.md) | ✅ Built; first real improvement pending | 11 / 12 | T6.12 (real Claude) |
 | 7 | [Team readiness](./08-team-readiness.md) | ✅ Built; Docker isolation unverified | 4 / 8 | T7.1–T7.3 (Docker daemon), T7.8 (not implemented) |
+| 8 | [Control UI](./09-control-ui.md) | ✅ Done | 9 / 9 | T8.9 needs Chromium (ran here; CI skips it) |
 
-`npm run spec:coverage` → 83 spec test IDs: 72 covered and passing, 11 gated, 0 missing.
+`npm run spec:coverage` → 92 spec test IDs: 80 covered and passing, 12 gated (T8.9 ran here too), 0 missing.
 
 ## Exit-criteria notes
 
@@ -54,3 +55,18 @@ Last update: 2026-10-22.
 - Reverting a candidate that created a file left an empty file instead of deleting it (T6.11).
 - The claim property test initially couldn't fail (fast-check delayed resolution, not execution);
   it now catches a newest-claim-wins mutant.
+
+## Phase 8 notes
+
+- The UI was reviewed in headless Chromium at 1440px and 390px, light and dark, against a live demo
+  server, with no console errors and no horizontal overflow on a phone. The review caught and fixed: SSE headers
+  not flushed until the first event, the Live floor showing a previous batch under a new job,
+  History omitting integration cost, distorted chart text from viewBox stretching, cards shrinking
+  in capped columns on phones, and demo-script bugs (a retry that couldn't undo a committed
+  attempt; a demo integrator that carried another issue's fix in through whole-file resolution).
+- Demo mode is honest about what's simulated: agents and costs are scripted; the repo, sandboxes,
+  verifier (`npm test`), merges and hidden-test scoring are real. The demo includes a repeated
+  verifier failure (#1), a verifier-caught retry (#3), a reviewer-caught retry (#7), a rejected
+  vague issue (#10), and real merge conflicts. Its improvement run proposes a candidate that the
+  gate correctly rejects as within-noise, because scripted agents ignore playbooks.
+- R7.7's read-only dashboard is kept (`factory dashboard`) for sharing a view without controls.

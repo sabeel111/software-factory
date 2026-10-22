@@ -180,6 +180,7 @@ export default {
 | 5 | [06-parallel-and-integration](./06-parallel-and-integration.md) | Concurrency, limits, Integrator | 4 |
 | 6 | [07-self-improvement](./07-self-improvement.md) | Retrospective plus benchmark-gated playbook evolution | 1, 5 |
 | 7 | [08-team-readiness](./08-team-readiness.md) | Container sandboxes, secrets, multi-repo, dashboard | 5 |
+| 8 | [09-control-ui](./09-control-ui.md) | Control UI with live observation layer | 5, 6 |
 
 The benchmark comes in Phase 1 on purpose. Every later phase reports its
 numbers against it, so progress is measured from day one.

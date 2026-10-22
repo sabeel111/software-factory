@@ -8,6 +8,7 @@ import { query, type McpServerConfig, type Options, type SDKMessage } from "@ant
 type SpawnFn = NonNullable<Options["spawnClaudeCodeProcess"]>;
 import { toJsonSchema } from "../contracts/index.js";
 import {
+  type AgentActivity,
   AgentFailed,
   AgentTimeout,
   validateOutput,
@@ -97,6 +98,7 @@ export class ClaudeAgentRunner implements AgentRunner {
     try {
       for await (const message of q) {
         transcript?.write(JSON.stringify(message) + "\n");
+        if (req.onActivity) for (const a of activityFromMessage(message, req.cwd)) req.onActivity(a);
         if (message.type === "result") result = message;
       }
     } catch (e) {
@@ -151,4 +153,79 @@ export function context7Server(apiKey = process.env.CONTEXT7_API_KEY): Record<st
       ...(apiKey ? { headers: { CONTEXT7_API_KEY: apiKey } } : {}),
     },
   };
+}
+
+// ── Observation layer ──────────────────────────────────────────────────────────
+
+function rel(path: unknown, cwd: string): string {
+  if (typeof path !== "string") return "";
+  return path.startsWith(cwd + "/") ? path.slice(cwd.length + 1) : path;
+}
+
+function firstLine(s: string, n = 160): string {
+  const line = s.split("\n").find((l) => l.trim()) ?? "";
+  return line.length > n ? line.slice(0, n - 1) + "…" : line;
+}
+
+/** Short, content-free description of a tool call: a path, a command's first line, a pattern. */
+export function summarizeToolInput(tool: string, input: unknown, cwd: string): string {
+  const i = (input ?? {}) as Record<string, unknown>;
+  switch (tool) {
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "MultiEdit":
+    case "NotebookEdit":
+      return rel(i.file_path ?? i.notebook_path, cwd);
+    case "Bash":
+      return firstLine(String(i.command ?? ""), 120);
+    case "Glob":
+      return `${i.pattern ?? ""}${i.path ? ` in ${rel(i.path, cwd)}` : ""}`;
+    case "Grep":
+      return `/${i.pattern ?? ""}/${i.path ? ` in ${rel(i.path, cwd)}` : ""}${i.glob ? ` (${i.glob})` : ""}`;
+    case "WebFetch":
+      return String(i.url ?? "");
+    default:
+      return tool.startsWith("mcp__")
+        ? ((Object.values(i).find((v) => typeof v === "string") as string | undefined) ?? "")
+        : "";
+  }
+}
+
+type Block = {
+  type: string;
+  text?: string;
+  name?: string;
+  input?: unknown;
+  is_error?: boolean;
+  content?: unknown;
+};
+
+/** Map one SDK message to zero or more activity entries (spec T8.4). Never includes file contents. */
+export function activityFromMessage(message: SDKMessage, cwd: string): AgentActivity[] {
+  const out: AgentActivity[] = [];
+  if (message.type === "assistant") {
+    for (const b of (message.message.content ?? []) as Block[]) {
+      if (b.type === "text" && b.text?.trim()) out.push({ kind: "text", detail: firstLine(b.text, 200) });
+      if (b.type === "tool_use" && b.name) {
+        const tool = b.name.startsWith("mcp__") ? b.name.split("__").slice(1).join(" › ") : b.name;
+        out.push({ kind: "tool", tool, detail: summarizeToolInput(b.name, b.input, cwd) });
+      }
+    }
+  } else if (message.type === "user") {
+    const content = (message.message as { content?: unknown }).content;
+    if (Array.isArray(content)) {
+      for (const b of content as Block[]) {
+        if (b.type !== "tool_result" || !b.is_error) continue;
+        const text =
+          typeof b.content === "string"
+            ? b.content
+            : Array.isArray(b.content)
+              ? ((b.content[0] as Block)?.text ?? "")
+              : "";
+        out.push({ kind: "result", detail: firstLine(text || "tool error"), isError: true });
+      }
+    }
+  }
+  return out;
 }

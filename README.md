@@ -41,11 +41,31 @@ export CONTEXT7_API_KEY=...    # optional, for live docs
 # Label issues `factory:ready` on GitHub, then:
 ./bin/factory.js run            # shows the plan, asks to confirm, runs the batch
 ./bin/factory.js status         # per-issue stage, attempt, time, cost
-./bin/factory.js dashboard      # read-only web view at http://127.0.0.1:4173
+./bin/factory.js serve          # control UI at http://127.0.0.1:4173
 ```
 
 Ctrl-C once stops new issues from starting and lets in-flight work finish. Ctrl-C twice cancels,
 releases every claim, and cleans up every sandbox.
+
+## Control UI
+
+```bash
+./bin/factory.js serve --demo   # zero-cost demo: scripted agents, real repo/sandboxes/tests/merges
+./bin/factory.js serve          # the real factory (same env vars as `factory run`)
+```
+
+Open the printed URL (`http://127.0.0.1:4173`). The UI has these views:
+
+- **Live:** a factory floor where issues move through Triage → Build → Verify → Review → Integrate → Shipped. It also shows concurrency lanes, a live feed of every agent's tool calls, spend against budget, and Start / Drain / Cancel controls.
+- **Issue drawer:** a stage timeline (Gantt chart), acceptance criteria, the verifier's real check output, reviewer findings, merge outcome, and per-issue cancel.
+- **History:** every batch, benchmark and improvement run, replayed exactly from its event log.
+- **Benchmark:** resolve rate per run, a table view, and reference / factory runs.
+- **Improvement:** candidates with hypothesis, gate decision, champion vs candidate scores, PR and revert.
+- **Settings:** the effective config after policy is applied, credential presence, and isolation warnings.
+
+The server binds to 127.0.0.1. Write actions need a per-session token embedded in the page, and requests from any
+other host or origin are rejected. Everything is driven by one typed event stream (`runs/<batch>/events.jsonl`)
+and one reducer shared by the server and the browser.
 
 ## Commands
 
@@ -57,7 +77,8 @@ releases every claim, and cleans up every sandbox.
 | `factory bench [--split holdout] [--repeat 3]` | Runs the whole factory on the TinyLinks benchmark and scores it with hidden tests |
 | `factory improve [--max-usd 30]` | Collects failures, has the retrospective propose playbook changes, evaluates them on holdout, and opens a PR for the best one if it clears the gate |
 | `factory improve --revert <candidateId>` | Opens a PR that exactly undoes an accepted improvement |
-| `factory dashboard` | Serves the read-only dashboard |
+| `factory serve [--demo] [--port 4173]` | Serves the control UI (see above) |
+| `factory dashboard` | Serves the older read-only dashboard |
 
 ## Self-improvement
 

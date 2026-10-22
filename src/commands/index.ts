@@ -3,3 +3,4 @@ import "./bench.js";
 import "./dashboard.js";
 import "./improve.js";
 import "./run.js";
+import "./serve.js";

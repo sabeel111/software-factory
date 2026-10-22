@@ -19,6 +19,7 @@ import { WORKER_TOOLS } from "./issue-pipeline.js";
 import type { Playbooks } from "./playbooks.js";
 import { checkTable, type PrSink } from "./pr.js";
 import { verify } from "./verifier.js";
+import { clip, type EventSink } from "../events/types.js";
 
 export interface ApprovedChange {
   issue: IssueRef;
@@ -42,6 +43,7 @@ export interface IntegratorDeps {
   budget?: Budget;
   signal?: AbortSignal;
   log?: (message: string) => void;
+  events?: EventSink;
 }
 
 export interface MergeStep {
@@ -88,6 +90,8 @@ export async function integrate(
   let conflictsResolved = 0;
   let costUsd = 0;
 
+  const emit = deps.events ?? (() => undefined);
+  emit({ type: "integration.started", issues: changes.map((c) => c.issue.number) });
   const box = await deps.provider.create({ snapshot: deps.snapshot, label: "integration" });
   try {
     await box.checkout(deps.baseCommit);
@@ -122,6 +126,20 @@ export async function integrate(
       input: unknown,
     ): Promise<{ output: ConflictResolution | null; cost: number }> => {
       if (budget.exhausted || deps.signal?.aborted) return { output: null, cost: 0 };
+      emit({ type: "stage.started", issue, stage: "integrator", attempt });
+      const t0 = Date.now();
+      const finished = (cost: number, ok: boolean, result?: unknown, error?: string) =>
+        emit({
+          type: "stage.finished",
+          issue,
+          stage: "integrator",
+          attempt,
+          durationMs: Date.now() - t0,
+          costUsd: cost,
+          ok,
+          result,
+          error,
+        });
       try {
         const r = await deps.runner.run({
           stage: "integrator",
@@ -143,12 +161,23 @@ export async function integrate(
           ),
           signal: deps.signal,
           runtime: box.agentRuntime?.(),
+          onActivity: (a) =>
+            emit({
+              type: "agent.activity",
+              issue,
+              stage: "integrator",
+              attempt,
+              ...a,
+              detail: clip(a.detail),
+            }),
         });
         budget.charge(r.costUsd);
+        finished(r.costUsd, true, r.output);
         return { output: r.output, cost: r.costUsd };
       } catch (e) {
         const cost = errorCost(e);
         budget.charge(cost);
+        finished(cost, false, undefined, clip((e as Error).message, 400));
         log(`integrator #${issue}: ${(e as Error).message}`);
         return { output: null, cost };
       }
@@ -172,6 +201,13 @@ export async function integrate(
         await box.exec(`git reset -q --hard ${preMerge} && git clean -fdq -e node_modules`);
         step.reason = reason;
         log(`integrator: ejected #${c.issue.number} (${reason})`);
+        emit({
+          type: "integration.merge",
+          issue: c.issue.number,
+          conflicted: step.conflicted,
+          merged: false,
+          reason,
+        });
       };
 
       const merge = await box.exec(
@@ -260,6 +296,7 @@ export async function integrate(
       }
       step.merged = true;
       headVerification = v;
+      emit({ type: "integration.merge", issue: c.issue.number, conflicted: step.conflicted, merged: true });
     }
     costUsd = steps.reduce((sum, s) => sum + s.costUsd, 0);
 
@@ -317,6 +354,7 @@ export async function integrate(
       conflictsResolved,
       finalVerification: headVerification,
     };
+    emit({ type: "integration.finished", merged, ejected, prUrl, costUsd });
     return { result, steps, prUrl, costUsd };
   } finally {
     await box.destroy();

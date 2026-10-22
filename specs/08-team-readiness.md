@@ -23,7 +23,7 @@ people who don't use the CLI.
 | R7.4 | **Credential isolation:** API keys (Anthropic, Context7, GitHub) are injected by a host-side proxy at egress. They never appear in the sandbox environment, filesystem, or agent context. |
 | R7.5 | **Multi-repo:** one config can list several repos, each with its own checks, limits and playbook overrides; the scheduler shares global limits across them. |
 | R7.6 | **Audit log:** every external side effect (comment, label, push, PR) is appended to `runs/audit.jsonl` with the runId, actor, target and timestamp. |
-| R7.7 | **Dashboard:** a read-only web page showing batches, per-issue stage timelines, costs, benchmark history and improvement history, served from the run store. No write actions. |
+| R7.7 | (Superseded for day-to-day use by the Phase 8 control UI; kept as a read-only view.) **Dashboard:** a read-only web page showing batches, per-issue stage timelines, costs, benchmark history and improvement history, served from the run store. No write actions. |
 | R7.8 | **Policy file:** org-level `factory.policy.ts` can lower (never raise) any repo's limits, and can add protected paths and blocked tools. Repo config can't override it. |
 
 ## Test cases
