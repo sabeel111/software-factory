@@ -134,6 +134,8 @@ export const RunRecord = z.object({
   playbookHash: z.string(),
   stages: z.array(StageRecord),
   outcome: RunOutcome.optional(),
+  /** Set when the run ended on an unexpected (non-agent) error. */
+  error: z.string().optional(),
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   prUrl: z.string().optional(),
