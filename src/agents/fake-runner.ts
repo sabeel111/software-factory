@@ -57,7 +57,20 @@ export class FakeAgentRunner implements AgentRunner {
     const started = Date.now();
     if ("throw" in step) throw new AgentFailed(step.throw, costUsd);
     if ("timeout" in step) throw new AgentTimeout(`${req.stage} timed out`, costUsd);
-    if (step.delayMs) await new Promise((r) => setTimeout(r, step.delayMs));
+    if (req.signal?.aborted) throw new AgentFailed(`${req.stage} cancelled`, costUsd);
+    if (step.delayMs) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, step.delayMs);
+        req.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(new AgentFailed(`${req.stage} cancelled`, costUsd));
+          },
+          { once: true },
+        );
+      });
+    }
     const raw = "act" in step ? await step.act({ req: req as AgentRunRequest<unknown> }) : step.output;
     const output = validateOutput(req.outputSchema, raw, costUsd);
     return {

@@ -1,6 +1,6 @@
 import type { query } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, it } from "vitest";
-import { ClaudeAgentRunner, context7Server } from "../src/agents/claude-runner.js";
+import { agentEnv, ClaudeAgentRunner, context7Server } from "../src/agents/claude-runner.js";
 import { AgentFailed, AgentOutputInvalid, READ_ONLY_TOOLS } from "../src/agents/runner.js";
 import { TriageResult } from "../src/contracts/index.js";
 import { accept } from "./helpers/scripts.js";
@@ -101,5 +101,17 @@ describe("ClaudeAgentRunner", () => {
       },
     });
     expect(context7Server("")).toEqual({ context7: { type: "http", url: "https://mcp.context7.com/mcp" } });
+  });
+
+  it("agents never inherit the factory's GitHub/docs credentials", () => {
+    const env = agentEnv({
+      PATH: "/bin",
+      ANTHROPIC_API_KEY: "a",
+      GITHUB_TOKEN: "g",
+      GH_TOKEN: "g2",
+      CONTEXT7_API_KEY: "c",
+      GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic x",
+    });
+    expect(env).toEqual({ PATH: "/bin", ANTHROPIC_API_KEY: "a" });
   });
 });

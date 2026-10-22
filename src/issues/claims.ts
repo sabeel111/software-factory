@@ -96,6 +96,16 @@ export class ClaimingIssueSource implements IssueSource {
     return orderIssues(eligible).map(toRef);
   }
 
+  async isEligible(issue: number): Promise<boolean> {
+    const i = await this.backend.getIssue(issue);
+    return (
+      i.state === "open" &&
+      i.labels.includes(LABELS.ready) &&
+      !i.labels.includes(LABELS.needsInfo) &&
+      !i.labels.includes(LABELS.failed)
+    );
+  }
+
   async claim(issue: number, runId: string): Promise<ClaimResult> {
     const mine = await this.backend.createComment(issue, claimBody(runId, this.now() + this.leaseMs));
     const comments = await this.backend.listComments(issue);
@@ -139,13 +149,8 @@ export class ClaimingIssueSource implements IssueSource {
   }
 
   async release(issue: number, runId: string, outcome: ReleaseOutcome): Promise<void> {
-    const mine = await this.ownClaim(issue, runId);
-    if (mine && !isReleased(mine)) {
-      await this.backend.updateComment(
-        mine.id,
-        `<!-- factory-claim-released run=${runId} -->\n🏭 Software factory run \`${runId}\` finished: ${outcome}.`,
-      );
-    }
+    // Labels first: once the claim comment stops being live, another run may claim the issue, and
+    // it must already see the final labels (isEligible) — otherwise a finished issue runs twice.
     const labels = (await this.backend.getIssue(issue)).labels;
     const remove = async (label: string) => {
       if (labels.includes(label)) await this.backend.removeLabel(issue, label);
@@ -153,13 +158,21 @@ export class ClaimingIssueSource implements IssueSource {
     const add = async (label: string) => {
       if (!labels.includes(label)) await this.backend.addLabels(issue, [label]);
     };
-    await remove(LABELS.claimed);
     if (outcome === "needs-info") await add(LABELS.needsInfo);
     if (outcome === "failed") {
       await add(LABELS.failed);
       await remove(LABELS.ready);
     }
     if (outcome === "done") await remove(LABELS.ready);
+    await remove(LABELS.claimed);
+
+    const mine = await this.ownClaim(issue, runId);
+    if (mine && !isReleased(mine)) {
+      await this.backend.updateComment(
+        mine.id,
+        `<!-- factory-claim-released run=${runId} -->\n🏭 Software factory run \`${runId}\` finished: ${outcome}.`,
+      );
+    }
   }
 
   async comment(issue: number, body: string): Promise<void> {

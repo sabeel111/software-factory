@@ -24,6 +24,8 @@ export interface AgentRunRequest<T> {
   timeoutSec?: number;
   mcpServers?: Record<string, unknown>;
   transcriptPath?: string;
+  /** Aborts the agent session (hard cancellation). */
+  signal?: AbortSignal;
 }
 
 export interface AgentRunResult<T> {

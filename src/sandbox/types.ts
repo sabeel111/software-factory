@@ -25,6 +25,8 @@ export interface SnapshotOptions {
 export interface SandboxProvider {
   readonly kind: string;
   prepareSnapshot(opts: SnapshotOptions): Promise<SnapshotId>;
+  /** The commit a snapshot was prepared at. */
+  snapshotCommit(id: SnapshotId): Promise<string>;
   create(opts: { snapshot: SnapshotId; label: string }): Promise<Sandbox>;
   /** Destroy sandboxes left behind by crashed processes. Returns the ids destroyed. */
   sweep(): Promise<string[]>;

@@ -52,7 +52,7 @@ open ONE draft PR: integration branch → main, listing merged issues, ejected i
 | R5.3 | The batch budget is enforced globally: cost is aggregated across concurrent runs, and no new stage starts once the budget is exhausted. |
 | R5.4 | The number of open factory PRs never exceeds `maxOpenPrs`. |
 | R5.5 | The Integrator re-runs **all** checks after **each** merge. A merge that can't be made green is ejected without affecting already-merged branches. |
-| R5.6 | Test counts never decrease across integration: after each merge, the number of tests ≥ the max of the two parents' counts (no tests silently dropped during conflict resolution). |
+| R5.6 | Test counts never decrease across integration: after each merge, the number of tests ≥ max(head, incoming, head + incoming − base), i.e. every test already integrated plus every test the incoming branch added (no tests silently dropped during conflict resolution). |
 | R5.7 | `factory status` shows each issue in the batch with its stage, attempt, elapsed time and cost, and the batch totals. |
 | R5.8 | First SIGINT drains; second SIGINT cancels, releases all claims, and destroys all sandboxes. |
 

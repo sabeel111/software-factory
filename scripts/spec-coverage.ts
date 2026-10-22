@@ -35,8 +35,10 @@ export function coverage(specTexts: string[], testTexts: string[]): CoverageRepo
   const pending = new Set<string>();
   const title = /\b(it|test)(\.skip|\.todo|\.skipIf\([^)]*\)|\.runIf\([^)]*\))?\(\s*["'`]([^"'`]*)/g;
   for (const text of testTexts) {
+    // A whole suite behind describe.skipIf/runIf is environment-gated (e2e, docker).
+    const gatedSuite = /\bdescribe\.(skipIf|runIf|skip)\(/.test(text);
     for (const m of text.matchAll(title)) {
-      const modifier = m[2] ?? "";
+      const modifier = (m[2] ?? "") || (gatedSuite ? ".skipIf" : "");
       for (const id of m[3]!.match(ID) ?? []) {
         present.add(id);
         // skipIf/runIf tests are environment-gated (e2e, docker): report them as pending.

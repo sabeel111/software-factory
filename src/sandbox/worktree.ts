@@ -29,6 +29,30 @@ export async function gitIn(cwd: string, ...args: string[]): Promise<string> {
   return stdout.trim();
 }
 
+/** git with extra environment (used for credentials that must never be written to disk). */
+async function gitEnv(cwd: string, env: Record<string, string>, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileP("git", args, {
+    cwd,
+    env: { ...process.env, ...env },
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return stdout.trim();
+}
+
+/**
+ * Per-command git auth for GitHub over HTTPS, passed through GIT_CONFIG_* environment variables so
+ * the token never lands in a git config file an agent could read.
+ */
+export function gitHubAuthEnv(token: string): Record<string, string> {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
 export const WORKTREE_ISOLATION_WARNING =
   "Sandbox provider 'worktree' isolates files only: agents can reach the network and the host's " +
   "environment. Use provider 'docker' for egress allowlisting and credential isolation (Phase 7).";
@@ -39,6 +63,8 @@ export interface WorktreeProviderOptions {
   defaultBranch?: string;
   /** Files/directories that must never appear inside a sandbox (e.g. hidden tests). */
   secretPaths?: string[];
+  /** Environment for the factory's own clone/fetch/push (e.g. gitHubAuthEnv(token)). Never given to agents. */
+  gitAuthEnv?: Record<string, string>;
 }
 
 interface SnapshotMeta {
@@ -77,6 +103,8 @@ export class WorktreeProvider implements SandboxProvider {
   readonly ledger: Ledger;
   private readonly defaultBranch: string;
   private readonly secretPaths: string[];
+  /** @internal */
+  readonly gitAuthEnv: Record<string, string>;
   private readonly locks = new KeyedMutex();
   private secretHashes?: Promise<Set<string>>;
 
@@ -84,6 +112,7 @@ export class WorktreeProvider implements SandboxProvider {
     this.root = resolve(opts.root ?? join(tmpdir(), "software-factory"));
     this.defaultBranch = opts.defaultBranch ?? "main";
     this.secretPaths = (opts.secretPaths ?? []).map((p) => resolve(p));
+    this.gitAuthEnv = opts.gitAuthEnv ?? {};
     this.ledger = new Ledger(join(this.root, "ledger.json"));
   }
 
@@ -112,10 +141,10 @@ export class WorktreeProvider implements SandboxProvider {
       const mirror = join(dir, "repo.git");
       const repoUrl =
         isAbsolute(opts.repoUrl) || !/^[a-z]+:/i.test(opts.repoUrl) ? resolve(opts.repoUrl) : opts.repoUrl;
-      await execFileP("git", ["clone", "-q", "--bare", repoUrl, mirror]);
+      await gitEnv(dir, this.gitAuthEnv, "clone", "-q", "--bare", repoUrl, mirror);
       // Bare clones don't map remote branches; fetch them so worktrees can see every ref.
       await gitIn(mirror, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*");
-      await gitIn(mirror, "fetch", "-q", "origin");
+      await gitEnv(mirror, this.gitAuthEnv, "fetch", "-q", "origin");
       const commit = await gitIn(mirror, "rev-parse", "--verify", `${opts.ref}^{commit}`);
       const base = join(dir, "base");
       await gitIn(mirror, "worktree", "add", "-q", "--detach", base, commit);
@@ -141,6 +170,10 @@ export class WorktreeProvider implements SandboxProvider {
     const file = join(this.snapshotDir(id), "snapshot.json");
     if (!existsSync(file)) throw new Error(`Unknown snapshot ${id}; call prepareSnapshot first`);
     return JSON.parse(await readFile(file, "utf8")) as SnapshotMeta;
+  }
+
+  async snapshotCommit(id: SnapshotId): Promise<string> {
+    return (await this.snapshotMeta(id)).commit;
   }
 
   async create(opts: { snapshot: SnapshotId; label: string }): Promise<Sandbox> {
@@ -262,7 +295,15 @@ class WorktreeSandbox implements Sandbox {
 
   async push(branch: string): Promise<void> {
     assertPushable(branch, this.defaultBranch);
-    await gitIn(this.path, "push", "-q", "--force", "origin", `HEAD:refs/heads/${branch}`);
+    await gitEnv(
+      this.path,
+      this.provider.gitAuthEnv,
+      "push",
+      "-q",
+      "--force",
+      "origin",
+      `HEAD:refs/heads/${branch}`,
+    );
   }
 
   async destroy(): Promise<void> {

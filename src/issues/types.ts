@@ -20,6 +20,8 @@ export interface ClaimResult {
 
 export interface IssueSource {
   listReady(): Promise<IssueRef[]>;
+  /** Re-check, after winning a claim, that the issue still wants work (open, ready, not parked). */
+  isEligible(issue: number): Promise<boolean>;
   claim(issue: number, runId: string): Promise<ClaimResult>;
   /** Extends the lease; throws ClaimLost if another run now holds the issue. */
   heartbeat(issue: number, runId: string): Promise<void>;

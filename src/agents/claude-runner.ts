@@ -47,6 +47,10 @@ export class ClaudeAgentRunner implements AgentRunner {
         }, req.timeoutSec * 1000)
       : undefined;
 
+    const onCancel = () => abort.abort();
+    if (req.signal?.aborted) throw new AgentFailed(`${req.stage} cancelled before start`);
+    req.signal?.addEventListener("abort", onCancel, { once: true });
+
     let transcript: NodeJS.WritableStream | undefined;
     if (req.transcriptPath) {
       await mkdir(dirname(req.transcriptPath), { recursive: true });
@@ -75,7 +79,11 @@ export class ClaudeAgentRunner implements AgentRunner {
         settingSources: [],
         persistSession: false,
         abortController: abort,
-        env: { ...process.env, ...this.opts.env, CLAUDE_AGENT_SDK_CLIENT_APP: "software-factory/0.1" },
+        env: {
+          ...agentEnv(process.env),
+          ...this.opts.env,
+          CLAUDE_AGENT_SDK_CLIENT_APP: "software-factory/0.1",
+        },
       },
     });
 
@@ -94,8 +102,10 @@ export class ClaudeAgentRunner implements AgentRunner {
       );
     } finally {
       clearTimeout(timer);
+      req.signal?.removeEventListener("abort", onCancel);
       transcript?.end();
     }
+    if (req.signal?.aborted) throw new AgentFailed(`${req.stage} cancelled`, result?.total_cost_usd ?? 0);
 
     if (timedOut)
       throw new AgentTimeout(`${req.stage} exceeded ${req.timeoutSec}s`, result?.total_cost_usd ?? 0);
@@ -114,6 +124,16 @@ export class ClaudeAgentRunner implements AgentRunner {
       transcriptPath: req.transcriptPath,
     };
   }
+}
+
+/** Credentials the factory uses for itself; agents (which have Bash) must never see them. */
+export const FACTORY_ONLY_ENV = ["GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PAT", "CONTEXT7_API_KEY"];
+
+export function agentEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = { ...env };
+  for (const k of FACTORY_ONLY_ENV) delete out[k];
+  for (const k of Object.keys(out)) if (k.startsWith("GIT_CONFIG_")) delete out[k];
+  return out;
 }
 
 /** Context7 docs MCP server; the key comes from the host environment, never from the sandbox (R4.5). */

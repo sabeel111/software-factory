@@ -102,6 +102,12 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
     log(`#${issue.number}: lost claim to ${claim.holder ?? "another run"}`);
     return { record, outcome: "lost_claim" };
   }
+  if (!(await deps.issues.isEligible(issue.number))) {
+    // Another run finished it between our listing and our claim.
+    await deps.issues.release(issue.number, runId, "abandoned");
+    log(`#${issue.number}: no longer ready; skipping`);
+    return { record, outcome: "lost_claim" };
+  }
 
   const budget = deps.batchBudget
     ? deps.batchBudget.child(config.limits.maxCostUsdPerIssue)
@@ -175,6 +181,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         timeoutSec: config.limits.stageTimeoutSec,
         mcpServers,
         transcriptPath: join(store.artifactDir(deps.batchId, runId), `${stage}-${attempt}.jsonl`),
+        signal: deps.signal,
       });
       budget.charge(r.costUsd);
       Object.assign(entry, { costUsd: r.costUsd, tokens: r.usage, output: r.output });
@@ -270,6 +277,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         record.commitSha = commitSha;
       } catch (e) {
         if (e instanceof BudgetExceeded || e instanceof Cancelled) throw e;
+        if (deps.signal?.aborted) throw new Cancelled("cancelled during worker");
         lastFailure = `worker attempt ${attempt} failed: ${(e as Error).message}`;
         log(`#${issue.number}: ${lastFailure}`);
         feedback = { error: lastFailure };
@@ -368,8 +376,8 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
       log(`#${issue.number}: ${e.message}`);
       return await finish("budget_exceeded", batchOut ? "abandoned" : "failed");
     }
-    if (e instanceof Cancelled) {
-      log(`#${issue.number}: ${e.message}`);
+    if (e instanceof Cancelled || deps.signal?.aborted) {
+      log(`#${issue.number}: ${(e as Error).message}`);
       return await finish("cancelled", "abandoned");
     }
     log(`#${issue.number}: run crashed: ${(e as Error).stack ?? e}`);

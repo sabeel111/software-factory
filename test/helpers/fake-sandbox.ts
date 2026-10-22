@@ -67,6 +67,10 @@ export class FakeSandboxProvider implements SandboxProvider {
     return box;
   }
 
+  async snapshotCommit(): Promise<string> {
+    return "base000";
+  }
+
   async sweep(): Promise<string[]> {
     return [];
   }
