@@ -1,0 +1,39 @@
+{
+  "name": "software-factory",
+  "version": "0.1.0",
+  "description": "Self-improving AI software factory: GitHub issues to verified, reviewed, integrated PRs",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "factory": "./bin/factory.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integ": "vitest run --project integ",
+    "spec:coverage": "tsx scripts/spec-coverage.ts",
+    "factory": "tsx src/cli.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "ajv": "^8.20.0",
+    "eslint": "^9.39.5",
+    "fast-check": "^4.10.2",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.306",
+    "commander": "^15.0.0",
+    "zod": "^4.6.7"
+  }
+}
