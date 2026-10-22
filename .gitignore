@@ -4,3 +4,4 @@ dist/
 runs/
 coverage/
 *.log
+*.bundle
