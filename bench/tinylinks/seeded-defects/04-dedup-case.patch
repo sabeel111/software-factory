@@ -1,0 +1,12 @@
+diff --git a/src/store.ts b/src/store.ts
+index 98af043..2ab1e54 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -12,6 +12,7 @@ export class Store {
+   private readonly links = new Map<string, Link>();
+ 
+   create(url: string, now: number): Link {
++    for (const existing of this.links.values()) if (existing.url.toLowerCase() === url) return existing;
+     const link: Link = { slug: this.newSlug(), url, createdAt: now, clicks: 0, lastClickedAt: null };
+     this.links.set(link.slug, link);
+     return link;

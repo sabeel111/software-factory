@@ -1,0 +1,46 @@
+diff --git a/src/router.ts b/src/router.ts
+index 3ce2335..1308985 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -15,6 +15,7 @@ export function toJson(link: Link): Record<string, unknown> {
+     url: link.url,
+     shortUrl: `/${link.slug}`,
+     createdAt: new Date(link.createdAt).toISOString(),
++    ...(link.expiresAt !== undefined ? { expiresAt: new Date(link.expiresAt).toISOString() } : {}),
+   };
+ }
+ 
+@@ -27,7 +28,13 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+     if (!body || typeof body.url !== "string") return send(res, 400, { error: "url is required" });
+     const target = normalizeUrl(body.url);
+     if (!target) return send(res, 400, { error: "invalid url" });
++    let expiresAt: number | undefined;
++    if (body.expiresAt !== undefined) {
++      expiresAt = typeof body.expiresAt === "string" ? Date.parse(body.expiresAt) : Number.NaN;
++      if (Number.isNaN(expiresAt) || expiresAt <= ctx.now()) return send(res, 400, { error: "invalid expiresAt" });
++    }
+     const link = ctx.store.create(target, ctx.now());
++    if (expiresAt !== undefined) link.expiresAt = expiresAt;
+     return send(res, 201, toJson(link));
+   }
+ 
+@@ -42,6 +49,7 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+   if (req.method === "GET" && match) {
+     const link = ctx.store.get(match[1]!);
+     if (!link) return send(res, 404, { error: "not found" });
++    if (link.expiresAt !== undefined && ctx.now() > link.expiresAt) return send(res, 410, { error: "link expired" });
+     ctx.store.recordClick(link, ctx.now());
+     res.writeHead(302, { Location: link.url });
+     return void res.end();
+diff --git a/src/store.ts b/src/store.ts
+index 98af043..67c27de 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -4,6 +4,7 @@ export interface Link {
+   createdAt: number;
+   clicks: number;
+   lastClickedAt: number | null;
++  expiresAt?: number;
+ }
+ 
+ const ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

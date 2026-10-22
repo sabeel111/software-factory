@@ -1,0 +1,17 @@
+diff --git a/src/router.ts b/src/router.ts
+index 3ce2335..c3a17c5 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -39,10 +39,10 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+   }
+ 
+   const match = /^\/([A-Za-z0-9_-]+)$/.exec(path);
+-  if (req.method === "GET" && match) {
++  if ((req.method === "GET" || req.method === "HEAD") && match) {
+     const link = ctx.store.get(match[1]!);
+     if (!link) return send(res, 404, { error: "not found" });
+-    ctx.store.recordClick(link, ctx.now());
++    if (req.method === "GET") ctx.store.recordClick(link, ctx.now());
+     res.writeHead(302, { Location: link.url });
+     return void res.end();
+   }

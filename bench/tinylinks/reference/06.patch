@@ -1,0 +1,22 @@
+diff --git a/src/router.ts b/src/router.ts
+index 3ce2335..33f013d 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -47,5 +47,17 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+     return void res.end();
+   }
+ 
++  const stats = /^\/links\/([A-Za-z0-9_-]+)\/stats$/.exec(path);
++  if (req.method === "GET" && stats) {
++    const link = ctx.store.get(stats[1]!);
++    if (!link) return send(res, 404, { error: "not found" });
++    return send(res, 200, {
++      slug: link.slug,
++      url: link.url,
++      clicks: link.clicks,
++      lastClickedAt: link.lastClickedAt === null ? null : new Date(link.lastClickedAt).toISOString(),
++    });
++  }
++
+   return send(res, 404, { error: "not found" });
+ }

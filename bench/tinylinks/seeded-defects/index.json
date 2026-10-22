@@ -1,0 +1,38 @@
+[
+  {
+    "id": "07-expiry-boundary",
+    "issue": 7,
+    "defect": "Uses `now > expiresAt`, so a link is still served at exactly expiresAt (issue requires at-or-after \u2192 410).",
+    "patch": "07-expiry-boundary.patch"
+  },
+  {
+    "id": "09-delete-before-auth",
+    "issue": 9,
+    "defect": "Deletes the link before checking the token: unauthorized requests get 401 but the link is already gone.",
+    "patch": "09-delete-before-auth.patch"
+  },
+  {
+    "id": "05-reserved-slugs",
+    "issue": 5,
+    "defect": "Custom slugs skip the reserved-word check, so `api` / `links` are accepted.",
+    "patch": "05-reserved-slugs.patch"
+  },
+  {
+    "id": "04-dedup-case",
+    "issue": 4,
+    "defect": "Dedup compares a lowercased stored URL to the raw URL, so paths that differ only in case are wrongly merged.",
+    "patch": "04-dedup-case.patch"
+  },
+  {
+    "id": "01-scheme-rewrite",
+    "issue": 1,
+    "defect": "Strips any explicit scheme and forces https, so `http://` URLs are silently upgraded and `ftp://` is accepted.",
+    "patch": "01-scheme-rewrite.patch"
+  },
+  {
+    "id": "06-off-by-one-clicks",
+    "issue": 6,
+    "defect": "Stats report clicks + 1.",
+    "patch": "06-off-by-one-clicks.patch"
+  }
+]

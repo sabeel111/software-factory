@@ -1,0 +1,14 @@
+diff --git a/src/url.ts b/src/url.ts
+index 736d5ea..20c8f55 100644
+--- a/src/url.ts
++++ b/src/url.ts
+@@ -2,7 +2,8 @@
+ export function normalizeUrl(raw: string): string | null {
+   let parsed: URL;
+   try {
+-    parsed = new URL(raw.trim());
++    const trimmed = raw.trim().replace(/^[a-z]+:\/\//i, "");
++    parsed = new URL(`https://${trimmed}`);
+   } catch {
+     return null;
+   }

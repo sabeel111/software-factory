@@ -1,0 +1,12 @@
+{
+  "number": 8,
+  "title": "Support HEAD requests on short links",
+  "body": "Link checkers send `HEAD /<slug>` and currently get 404.\n\nExpected: `HEAD /<slug>` returns the same status and `Location` header as `GET` (302, or 404 for unknown slugs) with an empty body.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "feature",
+  "split": "holdout",
+  "expectedTriage": "accept",
+  "hidden": "h08.test.ts"
+}

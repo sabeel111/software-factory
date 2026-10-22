@@ -1,0 +1,12 @@
+{
+  "number": 3,
+  "title": "Malformed ?url= on /api/shorten crashes with 500",
+  "body": "`GET /api/shorten?url=http://` returns `500 internal error`.\n\nExpected: any URL that can't be parsed, or isn't http(s), returns `400` with a JSON body `{ \"error\": \"...\" }` \u2014 the same validation `POST /links` uses. Examples that must return 400: `http://`, `::::`, `https://exa mple.com`, `javascript:alert(1)`. Valid URLs keep returning 201.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "bug",
+  "split": "holdout",
+  "expectedTriage": "accept",
+  "hidden": "h03.test.ts"
+}

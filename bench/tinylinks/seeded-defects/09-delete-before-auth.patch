@@ -1,0 +1,34 @@
+diff --git a/src/router.ts b/src/router.ts
+index 3ce2335..6f69a83 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -47,5 +47,14 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+     return void res.end();
+   }
+ 
++  const del = /^\/links\/([A-Za-z0-9_-]+)$/.exec(path);
++  if (req.method === "DELETE" && del) {
++    if (!ctx.store.delete(del[1]!)) return send(res, 404, { error: "not found" });
++    if (!ctx.adminToken || req.headers.authorization !== `Bearer ${ctx.adminToken}`) {
++      return send(res, 401, { error: "unauthorized" });
++    }
++    return send(res, 204);
++  }
++
+   return send(res, 404, { error: "not found" });
+ }
+diff --git a/src/store.ts b/src/store.ts
+index 98af043..f9d8742 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -21,6 +21,10 @@ export class Store {
+     return this.links.get(slug);
+   }
+ 
++  delete(slug: string): boolean {
++    return this.links.delete(slug);
++  }
++
+   recordClick(link: Link, now: number): void {
+     link.clicks += 1;
+     link.lastClickedAt = now;

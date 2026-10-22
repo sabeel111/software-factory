@@ -1,0 +1,12 @@
+{
+  "number": 6,
+  "title": "Add a stats endpoint",
+  "body": "Add `GET /links/:slug/stats` returning `200` with:\n\n```json\n{ \"slug\": \"abc123\", \"url\": \"https://...\", \"clicks\": 2, \"lastClickedAt\": \"2026-01-01T00:01:00.000Z\" }\n```\n\n- `clicks` counts redirects served for the slug.\n- `lastClickedAt` is the ISO time of the most recent redirect, or `null` if never clicked.\n- Unknown slug \u2192 `404`.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "feature",
+  "split": "train",
+  "expectedTriage": "accept",
+  "hidden": "h06.test.ts"
+}

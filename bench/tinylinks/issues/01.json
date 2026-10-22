@@ -1,0 +1,12 @@
+{
+  "number": 1,
+  "title": "URLs without a scheme are rejected instead of defaulting to https",
+  "body": "Shortening `example.com` (no scheme) currently fails with `400 invalid url`.\n\nExpected:\n- When the submitted URL has no scheme, assume `https://` (e.g. `example.com/docs?x=1` \u2192 `https://example.com/docs?x=1`).\n- Explicit `http://` URLs must stay `http://`.\n- Non-http(s) schemes such as `ftp://` must still be rejected with 400.\n- The redirect must use the normalized URL.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "bug",
+  "split": "train",
+  "expectedTriage": "accept",
+  "hidden": "h01.test.ts"
+}

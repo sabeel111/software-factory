@@ -1,0 +1,12 @@
+{
+  "number": 5,
+  "title": "Support custom slugs",
+  "body": "Allow `POST /links` to take an optional `slug`.\n\nRules:\n- Valid slugs are 3\u201332 characters of `A-Z a-z 0-9 _ -`.\n- The reserved words `api` and `links` are not allowed.\n- Invalid slug \u2192 `400`.\n- Slug already in use \u2192 `409`.\n- Otherwise create the link with that slug \u2192 `201`, and `GET /<slug>` redirects to it.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "feature",
+  "split": "train",
+  "expectedTriage": "accept",
+  "hidden": "h05.test.ts"
+}

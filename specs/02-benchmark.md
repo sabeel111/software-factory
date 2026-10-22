@@ -36,7 +36,7 @@ bench/
 | 5 | feature | Custom slugs via `POST /links { slug }` with validation and conflict handling (409) | train | accept |
 | 6 | feature | `GET /links/:slug/stats` returns the click count and the last-clicked time | train | accept |
 | 7 | feature | Link expiry: `expiresAt`; expired links return 410 (boundary: exactly at `expiresAt` is expired) | holdout | accept |
-| 8 | feature | Support `HEAD` on redirect routes | train | accept |
+| 8 | feature | Support `HEAD` on redirect routes | holdout | accept |
 | 9 | feature | `DELETE /links/:slug` with a simple bearer-token check | holdout | accept |
 | 10 | vague | "Make the links better and faster, users are complaining" | train | **reject** |
 

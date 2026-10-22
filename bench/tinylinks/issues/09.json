@@ -1,0 +1,12 @@
+{
+  "number": 9,
+  "title": "Allow deleting links (admin only)",
+  "body": "Add `DELETE /links/:slug`.\n\n- Requires `Authorization: Bearer <token>` where the token equals the server's `adminToken` option (default `$ADMIN_TOKEN`).\n- Missing or wrong token \u2192 `401` and the link is not deleted.\n- Unknown slug (with a valid token) \u2192 `404`.\n- Success \u2192 `204`, after which `GET /<slug>` returns 404.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "feature",
+  "split": "holdout",
+  "expectedTriage": "accept",
+  "hidden": "h09.test.ts"
+}

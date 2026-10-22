@@ -38,6 +38,7 @@ const COMMANDS: CommandSpec[] = [
       ["--split <split>", "train | holdout | all", "all"],
       ["--repeat <n>", "repeat runs to measure noise", "1"],
       ["--candidate <ref>", "score an existing git ref of the benchmark repo"],
+      ["-c, --config <path>", "factory config used for the benchmark run"],
     ],
   },
   {

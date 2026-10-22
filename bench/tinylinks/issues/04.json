@@ -1,0 +1,12 @@
+{
+  "number": 4,
+  "title": "Shortening the same URL twice creates duplicate slugs",
+  "body": "Every `POST /links` with the same URL creates a new slug.\n\nExpected: if a link for the same (normalized) URL already exists, return the existing link instead of creating a new one (status 200 or 201). URLs that normalize to the same value \u2014 e.g. `https://Example.com/n` and `https://example.com/n` \u2014 count as the same. Different URLs still get different slugs.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "bug",
+  "split": "holdout",
+  "expectedTriage": "accept",
+  "hidden": "h04.test.ts"
+}

@@ -1,0 +1,12 @@
+{
+  "number": 2,
+  "title": "Slug with a trailing slash returns 404",
+  "body": "`GET /abc123/` returns 404 even though `/abc123` exists.\n\nExpected: `/<slug>/` behaves exactly like `/<slug>` (302 to the target, or 404 if the slug doesn't exist).",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "bug",
+  "split": "train",
+  "expectedTriage": "accept",
+  "hidden": "h02.test.ts"
+}

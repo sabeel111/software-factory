@@ -1,0 +1,12 @@
+{
+  "number": 7,
+  "title": "Link expiration",
+  "body": "Allow `POST /links` to take an optional `expiresAt` (ISO 8601 timestamp).\n\n- Echo `expiresAt` (ISO string) in the create response.\n- Once the current time is **at or after** `expiresAt`, `GET /<slug>` returns `410 Gone` instead of redirecting.\n- An `expiresAt` that isn't a valid date, or that is already in the past, \u2192 `400`.\n- Links without `expiresAt` never expire.\n\nUse the server's injected clock (`now`), not `Date.now()` directly, so it can be tested.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "feature",
+  "split": "holdout",
+  "expectedTriage": "accept",
+  "hidden": "h07.test.ts"
+}

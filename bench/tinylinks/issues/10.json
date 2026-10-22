@@ -1,0 +1,12 @@
+{
+  "number": 10,
+  "title": "Make the links better and faster",
+  "body": "Users are complaining. Make the links better and faster, and generally improve things. Should be quick.",
+  "labels": [
+    "factory:ready"
+  ],
+  "kind": "vague",
+  "split": "train",
+  "expectedTriage": "reject",
+  "hidden": null
+}

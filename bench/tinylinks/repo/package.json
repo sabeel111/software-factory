@@ -1,0 +1,12 @@
+{
+  "name": "tinylinks",
+  "version": "1.0.0",
+  "description": "A tiny URL shortener",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

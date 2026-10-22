@@ -1,0 +1,15 @@
+diff --git a/src/router.ts b/src/router.ts
+index 3ce2335..fb30806 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -34,7 +34,9 @@ export async function route(ctx: Context, req: IncomingMessage, res: ServerRespo
+   if (req.method === "GET" && path === "/api/shorten") {
+     const raw = url.searchParams.get("url");
+     if (!raw) return send(res, 400, { error: "url is required" });
+-    const link = ctx.store.create(new URL(raw).toString(), ctx.now());
++    const target = normalizeUrl(raw);
++    if (!target) return send(res, 400, { error: "invalid url" });
++    const link = ctx.store.create(target, ctx.now());
+     return send(res, 201, toJson(link));
+   }
+ 
