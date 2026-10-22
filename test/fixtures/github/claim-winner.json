@@ -1,0 +1,30 @@
+[
+  {
+    "request": { "method": "POST", "path": "/repos/acme/app/issues/7/comments" },
+    "response": {
+      "status": 201,
+      "body": {
+        "id": 9001,
+        "body": "<!-- factory-claim run=run-a lease=2026-01-01T00:15:00.000Z -->",
+        "created_at": "2026-01-01T00:00:00Z"
+      }
+    }
+  },
+  {
+    "request": { "method": "GET", "path": "/repos/acme/app/issues/7/comments?per_page=100" },
+    "response": {
+      "status": 200,
+      "body": [
+        {
+          "id": 9001,
+          "body": "<!-- factory-claim run=run-a lease=2026-01-01T00:15:00.000Z -->",
+          "created_at": "2026-01-01T00:00:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "request": { "method": "POST", "path": "/repos/acme/app/issues/7/labels" },
+    "response": { "status": 200, "body": [{ "name": "factory:ready" }, { "name": "factory:claimed" }] }
+  }
+]

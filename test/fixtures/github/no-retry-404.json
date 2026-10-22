@@ -1,0 +1,6 @@
+[
+  {
+    "request": { "method": "GET", "path": "/repos/acme/app/issues/404" },
+    "response": { "status": 404, "body": { "message": "Not Found" } }
+  }
+]
