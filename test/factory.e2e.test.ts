@@ -1,6 +1,6 @@
 // Real Claude against the benchmark. Costs money: opt in with FACTORY_E2E=1 and Claude credentials
 // (ANTHROPIC_API_KEY or a Claude Code login). Results are appended to bench/results.jsonl.
-import { mkdtemp } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,7 +12,11 @@ import { scoreCandidate } from "../src/bench/score.js";
 import { ClaimingIssueSource } from "../src/issues/claims.js";
 import { MemoryBackend } from "../src/issues/memory.js";
 import { runIssue, type PipelineDeps } from "../src/pipeline/issue-pipeline.js";
-import { DirPlaybooks } from "../src/pipeline/playbooks.js";
+import { DEFAULT_PLAYBOOK_DIR, DirPlaybooks } from "../src/pipeline/playbooks.js";
+import { toScores } from "../src/commands/improve.js";
+import { fromBenchRun } from "../src/improve/collect.js";
+import { History } from "../src/improve/history.js";
+import { improve } from "../src/improve/improve.js";
 import { MemoryPrSink } from "../src/pipeline/pr.js";
 import { WorktreeProvider } from "../src/sandbox/worktree.js";
 import { RunStore } from "../src/store/run-store.js";
@@ -108,5 +112,32 @@ describe.skipIf(!enabled)("factory with real Claude", () => {
     });
     expect(run.score.resolveRate).toBeGreaterThanOrEqual(0.7);
     expect(run.wallClockMs).toBeLessThanOrEqual(10 * 60_000);
+  });
+
+  it("T6.12 one improve run recovers a deliberately weakened worker playbook", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "e2e-playbooks-"));
+    await cp(DEFAULT_PLAYBOOK_DIR, dir, { recursive: true });
+    const worker = await readFile(join(dir, "worker.md"), "utf8");
+    const weakened = worker.replace(/including the stated edge cases and[\s\S]*?\)\. /, "");
+    expect(weakened).not.toBe(worker);
+    await writeFile(join(dir, "worker.md"), weakened);
+    const report = await improve({
+      runner: new ClaudeAgentRunner(),
+      retro: benchConfig().stages.retro,
+      playbooksDir: dir,
+      history: new History(join(dir, "HISTORY.jsonl")),
+      promoter: { promote: async (p) => `local:${p.candidateId}` },
+      maxUsd: Number(process.env.FACTORY_E2E_IMPROVE_USD ?? 60),
+      repeat: 2,
+      collect: async (budget) => {
+        const run = await benchmarkOnce({ split: "train", playbooksDir: dir, label: "T6.12 collect" });
+        budget.charge(run.costUsd);
+        return fromBenchRun(run);
+      },
+      evaluate: async ({ playbooksDir }) =>
+        toScores(await benchmarkOnce({ split: "holdout", playbooksDir, label: "T6.12 eval" })),
+    });
+    console.log("T6.12", report.candidates);
+    expect(report.candidates.some((c) => c.decision === "accepted")).toBe(true);
   });
 });

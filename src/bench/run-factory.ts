@@ -5,12 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClaudeAgentRunner } from "../agents/claude-runner.js";
 import type { AgentRunner } from "../agents/runner.js";
-import { parseConfig, type FactoryConfig, type FactoryConfigInput } from "../config.js";
+import {
+  applyStageOverrides,
+  parseConfig,
+  readStageOverrides,
+  type FactoryConfig,
+  type FactoryConfigInput,
+  type StageOverrides,
+} from "../config.js";
 import { TriageResult } from "../contracts/index.js";
 import { ClaimingIssueSource } from "../issues/claims.js";
 import { MemoryBackend } from "../issues/memory.js";
 import { runBatch, type BatchResult } from "../orchestrator/batch.js";
-import { DirPlaybooks, type Playbooks } from "../pipeline/playbooks.js";
+import { DEFAULT_PLAYBOOK_DIR, DirPlaybooks, type Playbooks } from "../pipeline/playbooks.js";
 import { MemoryPrSink } from "../pipeline/pr.js";
 import { WorktreeProvider } from "../sandbox/worktree.js";
 import { factoryVersion, newId, playbookHash, RunStore } from "../store/run-store.js";
@@ -41,6 +48,10 @@ export interface BenchRun {
   costPerResolved: number | null;
   wallClockMs: number;
   batch: BatchResult;
+  /** Hidden-test result of each approved change on its own branch. */
+  hiddenByIssue: Record<number, boolean>;
+  ejected: Set<number>;
+  issues: BenchIssue[];
 }
 
 export interface EvaluateOptions {
@@ -56,8 +67,11 @@ export interface EvaluateOptions {
   log?: (m: string) => void;
 }
 
-export function benchConfig(overrides: Partial<FactoryConfigInput> = {}): FactoryConfig {
-  return parseConfig({
+export function benchConfig(
+  overrides: Partial<FactoryConfigInput> = {},
+  stageOverrides: StageOverrides = {},
+): FactoryConfig {
+  const config = parseConfig({
     prMode: "integrated",
     checks: [{ name: "test", command: "npm test" }],
     ...overrides,
@@ -65,13 +79,17 @@ export function benchConfig(overrides: Partial<FactoryConfigInput> = {}): Factor
     sandbox: { provider: "worktree", setup: [] },
     secretPaths: [join(BENCH_ROOT, "hidden")],
   });
+  return applyStageOverrides(config, stageOverrides);
 }
 
 /** One full benchmark run on a fresh fixture repo. */
 export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRun> {
   const split = opts.split ?? "all";
   const issues = await loadIssues(undefined, split);
-  const config = benchConfig(opts.config);
+  const config = benchConfig(
+    opts.config,
+    await readStageOverrides(opts.playbooksDir ?? DEFAULT_PLAYBOOK_DIR),
+  );
   const work = await mkdtemp(join(tmpdir(), "factory-benchrun-"));
   try {
     const bench = await prepareBenchRepo(join(work, "repo"));
@@ -117,6 +135,7 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
     // False passes: changes the verifier passed whose own hidden test fails.
     const approved = batch.results.filter((r) => r.approved);
     let falsePasses = 0;
+    const hiddenByIssue: Record<number, boolean> = {};
     for (const r of approved) {
       const issue = issues.find((i) => i.number === r.record.issue.number);
       if (!issue?.hidden) continue;
@@ -125,9 +144,11 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
         candidateRef: r.approved!.branch,
         issues: [issue],
       });
+      hiddenByIssue[issue.number] = own.perIssue[0]?.passed ?? false;
       if (!own.perIssue[0]?.passed) falsePasses++;
     }
     const falsePassRate = approved.length ? falsePasses / approved.length : null;
+    const ejected = new Set(batch.integration?.result.ejected.map((e) => e.issue) ?? []);
     const run: BenchRun = {
       score,
       triageAccuracy: score.triageAccuracy,
@@ -136,6 +157,9 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
       costPerResolved: score.resolved ? batch.costUsd / score.resolved : null,
       wallClockMs: batch.wallClockMs,
       batch,
+      hiddenByIssue,
+      ejected,
+      issues,
     };
     if (opts.record ?? true) {
       await appendResult({

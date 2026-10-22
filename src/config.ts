@@ -78,6 +78,8 @@ export const RepoConfig = z.object({
 });
 
 export const FactoryConfig = RepoConfig.extend({
+  /** The factory's own GitHub repo (owner/name), where self-improvement PRs and issues go. */
+  selfRepo: z.string().optional(),
   /** Additional repos for multi-repo operation (Phase 7); each inherits top-level settings it doesn't set. */
   repos: z.array(z.record(z.string(), z.unknown())).optional(),
   /** Paths that must never appear inside a sandbox (hidden tests, secrets). */
@@ -103,7 +105,39 @@ export function parseConfig(raw: unknown): FactoryConfig {
   return result.data;
 }
 
-export async function loadConfig(path = "factory.config.ts"): Promise<FactoryConfig> {
+/** Stage-setting overrides owned by the Improver; they live with the playbooks (its only mutable surface). */
+export const StageOverrides = z.record(
+  z.string(),
+  z.object({
+    model: z.string().optional(),
+    effort: Effort.optional(),
+    maxTurns: z.number().int().positive().optional(),
+  }),
+);
+export type StageOverrides = z.infer<typeof StageOverrides>;
+
+export function applyStageOverrides(config: FactoryConfig, overrides: StageOverrides): FactoryConfig {
+  const stages = { ...config.stages } as Record<string, StageConfig>;
+  for (const [stage, o] of Object.entries(overrides)) {
+    if (!stages[stage]) continue;
+    stages[stage] = {
+      ...stages[stage]!,
+      ...Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)),
+    };
+  }
+  return { ...config, stages: stages as FactoryConfig["stages"] };
+}
+
+export async function readStageOverrides(playbooksDir: string): Promise<StageOverrides> {
+  const file = resolve(playbooksDir, "stages.json");
+  if (!existsSync(file)) return {};
+  return StageOverrides.parse(JSON.parse(await readFile(file, "utf8")));
+}
+
+export async function loadConfig(
+  path = "factory.config.ts",
+  playbooksDir = resolve(import.meta.dirname, "../playbooks"),
+): Promise<FactoryConfig> {
   const abs = resolve(path);
   if (!existsSync(abs)) throw new ConfigError(`Config file not found: ${abs}`);
   let raw: unknown;
@@ -117,5 +151,5 @@ export async function loadConfig(path = "factory.config.ts"): Promise<FactoryCon
     if (raw && typeof raw === "object" && "default" in raw && !("repo" in raw))
       raw = (raw as { default: unknown }).default;
   }
-  return parseConfig(raw);
+  return applyStageOverrides(parseConfig(raw), await readStageOverrides(playbooksDir));
 }

@@ -52,6 +52,17 @@ export class MemoryPrSink implements PrSink {
   }
 }
 
+/** No code host configured: the branch is the deliverable; print it instead of opening a PR. */
+export class LocalBranchPrSink implements PrSink {
+  async createDraft(pr: { head: string; base: string; title: string; body: string }): Promise<OpenedPr> {
+    return { number: 0, url: `branch ${pr.head} (open a PR into ${pr.base} to review it)` };
+  }
+  async countOpenFactoryPrs(): Promise<number> {
+    return 0;
+  }
+  async label(): Promise<void> {}
+}
+
 export function checkTable(v: VerifierResult): string {
   const rows = v.checks.map(
     (c) =>

@@ -190,6 +190,19 @@ export class GitHubClient implements IssueBackend {
     }
   }
 
+  async createIssue(issue: {
+    title: string;
+    body: string;
+    labels: string[];
+  }): Promise<{ number: number; url: string }> {
+    const { data } = await this.request<{ number: number; html_url: string }>(
+      "POST",
+      `/repos/${this.repo}/issues`,
+      issue,
+    );
+    return { number: data.number, url: data.html_url };
+  }
+
   async createPullRequest(pr: {
     head: string;
     base: string;
