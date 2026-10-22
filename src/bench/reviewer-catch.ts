@@ -62,6 +62,7 @@ export async function reviewerCatchRate(opts: {
         outputSchema: ReviewResult,
         cwd: box.path,
         tools: READ_ONLY_TOOLS,
+        provider: opts.reviewer.provider,
         model: opts.reviewer.model,
         effort: opts.reviewer.effort,
       });

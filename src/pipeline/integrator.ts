@@ -150,6 +150,7 @@ export async function integrate(
           outputSchema: ConflictResolution,
           cwd: box.path,
           tools: WORKER_TOOLS.filter((t) => !config.blockedTools.includes(t)),
+          provider: config.stages.integrator.provider,
           model: config.stages.integrator.model,
           effort: config.stages.integrator.effort,
           maxTurns: config.stages.integrator.maxTurns,

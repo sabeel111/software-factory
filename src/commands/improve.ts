@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { ClaudeAgentRunner } from "../agents/claude-runner.js";
+import { createRunner } from "../agents/routing.js";
 import { BENCH_ROOT, loadIssues } from "../bench/benchmark.js";
 import { benchmarkOnce, type BenchRun } from "../bench/run-factory.js";
 import type { BenchResultEntry } from "../bench/score.js";
@@ -86,7 +86,7 @@ export async function runImprove(config: FactoryConfig, opts: ImproveRunOptions)
   const benchIssues = await loadIssues();
   const live = { events: opts.events, batchId: opts.batchId, signal: opts.signal, log: opts.log };
   return improve({
-    runner: new ClaudeAgentRunner(),
+    runner: createRunner(config),
     retro: config.stages.retro,
     playbooksDir: DEFAULT_PLAYBOOK_DIR,
     history,

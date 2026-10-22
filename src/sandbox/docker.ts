@@ -320,6 +320,7 @@ class DockerSandbox implements Sandbox {
     const gatewayUrl = this.provider.gatewayUrl();
     return {
       env,
+      exec: (cmd, o) => this.exec(cmd, o),
       spawn: (o) => {
         // `-e NAME` (no value) copies the variable from the docker client's environment, which we
         // set to the agent env — so values never appear on a command line.

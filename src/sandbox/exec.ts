@@ -11,12 +11,17 @@ function capped(buf: string, chunk: string): string {
 }
 
 /** Run a shell command in its own process group; on timeout the whole group is killed. */
-export function execShell(cmd: string, cwd: string, opts: ExecOptions = {}): Promise<ExecResult> {
+export function execShell(
+  cmd: string,
+  cwd: string,
+  opts: ExecOptions & { inheritEnv?: boolean } = {},
+): Promise<ExecResult> {
   const started = Date.now();
   return new Promise((resolve) => {
     const child = spawn("bash", ["-c", cmd], {
       cwd,
-      env: { ...process.env, ...opts.env },
+      // inheritEnv: false gives the command exactly opts.env (agent tools get a scrubbed environment).
+      env: opts.inheritEnv === false ? opts.env : { ...process.env, ...opts.env },
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });

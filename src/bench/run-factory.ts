@@ -3,7 +3,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ClaudeAgentRunner } from "../agents/claude-runner.js";
+import { createRunner } from "../agents/routing.js";
 import type { AgentRunner } from "../agents/runner.js";
 import {
   applyStageOverrides,
@@ -111,7 +111,7 @@ export async function benchmarkOnce(opts: EvaluateOptions = {}): Promise<BenchRu
     const playbooks = opts.playbooks ?? new DirPlaybooks(opts.playbooksDir);
     const batch = await runBatch({
       config,
-      runner: opts.runner ?? new ClaudeAgentRunner(),
+      runner: opts.runner ?? createRunner(config),
       issues: new ClaimingIssueSource(backend),
       prs: new MemoryPrSink(),
       provider,

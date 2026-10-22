@@ -1,6 +1,7 @@
 // `factory run`: pull ready issues from GitHub and run a batch.
 import { createInterface } from "node:readline/promises";
-import { context7Server, ClaudeAgentRunner } from "../agents/claude-runner.js";
+import { context7Server } from "../agents/claude-runner.js";
+import { createRunner } from "../agents/routing.js";
 import { registerCommand } from "../cli.js";
 import { loadConfig, resolveRepos } from "../config.js";
 import type { RunRecord } from "../contracts/index.js";
@@ -97,7 +98,7 @@ registerCommand("run", async (opts) => {
       });
       batches.push({
         config,
-        runner: new ClaudeAgentRunner(),
+        runner: createRunner(config),
         issues: p.issues,
         prs: new GitHubPrSink(p.gh),
         provider,

@@ -10,6 +10,8 @@ export const DEFAULT_MODEL = "claude-opus-5-5";
 const Effort = z.enum(["low", "medium", "high", "xhigh", "max"]);
 
 const StageConfig = z.object({
+  /** Which model provider runs this stage (specs/10-model-providers.md); unset means "anthropic". */
+  provider: z.string().optional(),
   model: z.string().default(DEFAULT_MODEL),
   effort: Effort.default("medium"),
   maxTurns: z.number().int().positive().optional(),
@@ -18,6 +20,60 @@ export type StageConfig = z.infer<typeof StageConfig>;
 
 const stageDefault = (effort: z.infer<typeof Effort>) =>
   StageConfig.default({ model: DEFAULT_MODEL, effort });
+
+// ── Model providers (specs/10-model-providers.md) ──────────────────────────────
+
+export const ModelPricing = z.object({
+  inputPerMTok: z.number().nonnegative(),
+  outputPerMTok: z.number().nonnegative(),
+});
+export type ModelPricing = z.infer<typeof ModelPricing>;
+
+export const ProviderConfig = z.object({
+  type: z.enum(["anthropic", "openai-compatible"]).default("openai-compatible"),
+  /** Chat Completions base URL, e.g. https://api.openai.com/v1 */
+  baseUrl: z.string().url().optional(),
+  /** Host environment variable holding the API key (never passed to agents). */
+  apiKeyEnv: z.string().optional(),
+  /** Extra request headers (e.g. OpenRouter's HTTP-Referer / X-Title). */
+  headers: z.record(z.string(), z.string()).default({}),
+  /** USD per million tokens, per model id. */
+  pricing: z.record(z.string(), ModelPricing).default({}),
+  /** The provider reports the cost of each request (OpenRouter `usage.cost`). */
+  usageCost: z.boolean().default(false),
+  /** Run without cost data (local models): budgets can't be enforced. */
+  allowUnpriced: z.boolean().default(false),
+  /** How effort is sent: OpenAI `reasoning_effort`, OpenRouter `reasoning.effort`, or not at all. */
+  reasoningStyle: z.enum(["openai", "openrouter", "none"]).default("none"),
+});
+export type ProviderConfig = z.infer<typeof ProviderConfig>;
+
+/** A provider as written in config: no defaults, so a partial declaration never resets a preset. */
+const ProviderDeclaration = z
+  .object({
+    type: ProviderConfig.shape.type.unwrap(),
+    baseUrl: z.string().url(),
+    apiKeyEnv: z.string(),
+    headers: z.record(z.string(), z.string()),
+    pricing: z.record(z.string(), ModelPricing),
+    usageCost: z.boolean(),
+    allowUnpriced: z.boolean(),
+    reasoningStyle: ProviderConfig.shape.reasoningStyle.unwrap(),
+  })
+  .partial();
+
+/** Providers that work without a declaration; a declaration with the same name is merged over these. */
+export const PROVIDER_PRESETS: Record<string, z.input<typeof ProviderConfig>> = {
+  anthropic: { type: "anthropic" },
+  openai: { type: "openai-compatible", baseUrl: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY" },
+  openrouter: {
+    type: "openai-compatible",
+    baseUrl: "https://openrouter.ai/api/v1",
+    apiKeyEnv: "OPENROUTER_API_KEY",
+    usageCost: true,
+    headers: { "X-Title": "software-factory" },
+  },
+};
 
 export const Limits = z.object({
   concurrency: z.number().int().positive().default(4),
@@ -77,6 +133,8 @@ export const RepoConfig = z.object({
   docs: z.object({ context7: z.boolean().default(true) }).default({ context7: true }),
   /** Agent tools that must never be granted (set by org policy). */
   blockedTools: z.array(z.string()).default([]),
+  /** Model providers by name; "anthropic", "openai" and "openrouter" are presets. */
+  providers: z.record(z.string(), ProviderDeclaration).default({}),
 });
 
 export const FactoryConfig = RepoConfig.extend({
@@ -104,7 +162,59 @@ export function parseConfig(raw: unknown): FactoryConfig {
     const lines = result.error.issues.map((i) => `  ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new ConfigError(`Invalid factory config:\n${lines.join("\n")}`);
   }
+  validateProviders(result.data);
   return result.data;
+}
+
+/** A provider's effective settings: preset merged with the config's declaration. */
+export function resolveProvider(config: Pick<FactoryConfig, "providers">, name: string): ProviderConfig {
+  const preset = PROVIDER_PRESETS[name];
+  const declared = config.providers[name];
+  if (!preset && !declared) {
+    throw new ConfigError(
+      `Unknown model provider "${name}". Declare it under providers (presets: ${Object.keys(PROVIDER_PRESETS).join(", ")}).`,
+    );
+  }
+  return ProviderConfig.parse({
+    ...preset,
+    ...declared,
+    headers: { ...preset?.headers, ...declared?.headers },
+    pricing: { ...preset?.pricing, ...declared?.pricing },
+  });
+}
+
+export const stageProvider = (s: Pick<StageConfig, "provider">): string => s.provider ?? "anthropic";
+
+/** R9.1 / R9.5: every stage's provider exists, can reach an API, and can be priced. */
+export function validateProviders(config: FactoryConfig): void {
+  for (const [stage, s] of Object.entries(config.stages) as [string, StageConfig][]) {
+    const name = stageProvider(s);
+    let p: ProviderConfig;
+    try {
+      p = resolveProvider(config, name);
+    } catch (e) {
+      throw new ConfigError(`stages.${stage}.provider: ${(e as Error).message}`);
+    }
+    if (p.type !== "openai-compatible") continue;
+    if (!p.baseUrl) throw new ConfigError(`providers.${name}.baseUrl is required (used by stages.${stage})`);
+    if (!p.usageCost && !p.allowUnpriced && !p.pricing[s.model]) {
+      throw new ConfigError(
+        `providers.${name}: no pricing for model "${s.model}" (used by stages.${stage}). ` +
+          `Add providers.${name}.pricing["${s.model}"] = { inputPerMTok, outputPerMTok }, ` +
+          `or set allowUnpriced: true (budgets can't then be enforced).`,
+      );
+    }
+  }
+}
+
+/** Environment variables that hold provider keys (stripped from every agent and tool environment). */
+export function providerKeyEnvs(config: Pick<FactoryConfig, "providers">): string[] {
+  const names = new Set<string>();
+  for (const n of new Set([...Object.keys(PROVIDER_PRESETS), ...Object.keys(config.providers)])) {
+    const env = resolveProvider(config, n).apiKeyEnv;
+    if (env) names.add(env);
+  }
+  return [...names];
 }
 
 /** Each repo of a multi-repo config, with top-level settings inherited where the repo doesn't set them. */
@@ -209,6 +319,7 @@ export async function loadConfig(
       raw = (raw as { default: unknown }).default;
   }
   let config = applyStageOverrides(parseConfig(raw), await readStageOverrides(playbooksDir));
+  validateProviders(config);
   // The org policy sits next to the config and always wins (repo config can't override it).
   const policyPath = resolve(dirname(abs), "factory.policy.ts");
   if (existsSync(policyPath))

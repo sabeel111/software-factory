@@ -18,6 +18,8 @@ export interface AgentRunRequest<T> {
   outputSchema: z.ZodType<T>;
   cwd: string;
   tools: readonly ToolName[];
+  /** Model provider name from config; unset means "anthropic" (specs/10-model-providers.md). */
+  provider?: string;
   model: string;
   effort: "low" | "medium" | "high" | "xhigh" | "max";
   maxTurns?: number;

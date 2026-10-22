@@ -1,7 +1,7 @@
 # Phase Status
 
 Updated at the end of each phase (see Overview §10, Definition of done).
-Last update: 2026-10-22 (Phase 8).
+Last update: 2026-10-22 (Phase 9).
 
 | Phase | Spec | Status | Tests (run here) | Gated tests (need a real service) |
 |-------|------|--------|------------------|-----------------------------------|
@@ -14,8 +14,9 @@ Last update: 2026-10-22 (Phase 8).
 | 6 | [Self-improvement](./07-self-improvement.md) | ✅ Built; first real improvement pending | 11 / 12 | T6.12 (real Claude) |
 | 7 | [Team readiness](./08-team-readiness.md) | ✅ Built; Docker isolation unverified | 4 / 8 | T7.1–T7.3 (Docker daemon), T7.8 (not implemented) |
 | 8 | [Control UI](./09-control-ui.md) | ✅ Done | 9 / 9 | T8.9 needs Chromium (ran here; CI skips it) |
+| 9 | [Model providers](./10-model-providers.md) | ✅ Built; real-provider run pending | 7 / 8 | T9.8 (real OpenAI / OpenRouter key) |
 
-`npm run spec:coverage` → 92 spec test IDs: 80 covered and passing, 12 gated (T8.9 ran here too), 0 missing.
+`npm run spec:coverage` → 100 spec test IDs: 87 covered and passing, 13 gated (T8.9 ran here too), 0 missing.
 
 ## Exit-criteria notes
 
@@ -55,6 +56,19 @@ Last update: 2026-10-22 (Phase 8).
 - Reverting a candidate that created a file left an empty file instead of deleting it (T6.11).
 - The claim property test initially couldn't fail (fast-check delayed resolution, not execution);
   it now catches a newest-claim-wins mutant.
+
+## Phase 9 notes
+
+- Claude stages are unchanged (Agent SDK). Other providers use the factory's own Chat Completions
+  loop, tested against a scripted local server, including the full TinyLinks pipeline (T9.7: a
+  real `Edit`, a real `npm test` and a draft PR). No real OpenAI or OpenRouter call was made here,
+  because there were no keys. T9.8 is the opt-in check.
+- Context7 (MCP) is Claude-only for now; non-Claude stages work without live docs.
+- Review caught one bug before commit: a partial declaration of a preset provider (for example
+  adding a header to `openrouter`) re-applied schema defaults, silently turning off `usageCost`.
+  Declarations are now default-free and merged over the preset (covered in T9.1).
+- The improver's `stages.json` can't change a stage's provider. Switching providers changes cost
+  and data flow, so it stays a human decision.
 
 ## Phase 8 notes
 

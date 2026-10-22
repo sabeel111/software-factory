@@ -33,7 +33,7 @@ export interface EnvInfo {
   prMode: string;
   checks: { name: string; command: string }[];
   limits: Record<string, number>;
-  stages: Record<string, { model: string; effort: string; maxTurns?: number }>;
+  stages: Record<string, { provider?: string; model: string; effort: string; maxTurns?: number }>;
   protectedPaths: string[];
   blockedTools: string[];
   warnings: string[];

@@ -188,6 +188,7 @@ export async function runIssue(issue: IssueRef, runId: string, deps: PipelineDep
         outputSchema: schema,
         cwd,
         tools: allowedTools,
+        provider: settings.provider,
         model: settings.model,
         effort: settings.effort,
         maxTurns: settings.maxTurns,

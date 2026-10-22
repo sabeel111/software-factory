@@ -2,13 +2,14 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { context7Server, ClaudeAgentRunner } from "../agents/claude-runner.js";
+import { context7Server } from "../agents/claude-runner.js";
+import { createRunner } from "../agents/routing.js";
 import { BENCH_ROOT, loadIssues, prepareBenchRepo } from "../bench/benchmark.js";
 import { benchmarkOnce } from "../bench/run-factory.js";
 import { appendResult, scoreCandidate } from "../bench/score.js";
 import { createProvider, githubToken, repoUrl } from "../commands/factory-setup.js";
 import { revertImprovement, runImprove } from "../commands/improve.js";
-import { resolveRepos, type FactoryConfig } from "../config.js";
+import { resolveProvider, resolveRepos, stageProvider, type FactoryConfig } from "../config.js";
 import { ClaimingIssueSource } from "../issues/claims.js";
 import { GitHubClient } from "../issues/github.js";
 import { DirPlaybooks } from "../pipeline/playbooks.js";
@@ -60,7 +61,9 @@ export class LiveEnvironment implements Environment {
       prMode: c.prMode,
       checks: c.checks,
       limits: { ...c.limits },
-      stages: c.stages,
+      stages: Object.fromEntries(
+        Object.entries(c.stages).map(([k, s]) => [k, { ...s, provider: stageProvider(s) }]),
+      ),
       protectedPaths: c.protectedPaths,
       blockedTools: c.blockedTools,
       warnings,
@@ -68,8 +71,15 @@ export class LiveEnvironment implements Environment {
         github: Boolean(githubToken()),
         anthropic: Boolean(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN),
         context7: Boolean(process.env.CONTEXT7_API_KEY),
+        // Keys for the other providers the stages use (presence only, never values: R9.8).
+        ...Object.fromEntries(
+          [...new Set(Object.values(c.stages).map(stageProvider))]
+            .map((name) => [name, resolveProvider(c, name)] as const)
+            .filter(([, p]) => p.type === "openai-compatible")
+            .map(([name, p]) => [name, p.apiKeyEnv ? Boolean(process.env[p.apiKeyEnv]) : true]),
+        ),
       },
-      costNote: `Real Claude usage: up to $${c.limits.maxCostUsdPerIssue} per issue and $${c.limits.maxCostUsdPerRun} per batch.`,
+      costNote: `Real model usage: up to $${c.limits.maxCostUsdPerIssue} per issue and $${c.limits.maxCostUsdPerRun} per batch.`,
     };
   }
 
@@ -108,7 +118,7 @@ export class LiveEnvironment implements Environment {
     });
     return {
       config,
-      runner: new ClaudeAgentRunner(),
+      runner: createRunner(config),
       issues: new ClaimingIssueSource(gh),
       prs: new GitHubPrSink(gh),
       provider,

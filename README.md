@@ -37,6 +37,8 @@ cp factory.config.example.ts factory.config.ts   # set `repo`, checks, limits
 export GITHUB_TOKEN=...        # issues:write + pull_requests:write on the target repo
 export ANTHROPIC_API_KEY=...   # or a Claude Code login
 export CONTEXT7_API_KEY=...    # optional, for live docs
+export OPENAI_API_KEY=...      # optional, for stages on OpenAI
+export OPENROUTER_API_KEY=...  # optional, for stages on OpenRouter
 
 # Label issues `factory:ready` on GitHub, then:
 ./bin/factory.js run            # shows the plan, asks to confirm, runs the batch
@@ -66,6 +68,45 @@ Open the printed URL (`http://127.0.0.1:4173`). The UI has these views:
 The server binds to 127.0.0.1. Write actions need a per-session token embedded in the page, and requests from any
 other host or origin are rejected. Everything is driven by one typed event stream (`runs/<batch>/events.jsonl`)
 and one reducer shared by the server and the browser.
+
+## Model providers
+
+Each stage can run on a different provider. Claude (`anthropic`) is the default and runs through
+the Claude Agent SDK. OpenAI, OpenRouter, and any other server with an OpenAI-compatible
+`/chat/completions` endpoint (Together, Groq, vLLM, Ollama, LM Studio and so on) run through the
+factory's own agent loop. It uses the same typed outputs, tool allowlists, budgets, timeouts, live
+activity and transcripts.
+
+```ts
+stages: {
+  triage:   { provider: "openrouter", model: "<vendor>/<model>", effort: "low" },
+  worker:   { provider: "anthropic",  model: "claude-opus-5-5",  effort: "high" },
+  reviewer: { provider: "openai",     model: "<model-id>",       effort: "medium" },
+},
+providers: {
+  // "openai" and "openrouter" are presets; declare only what you want to add or change.
+  openai: { pricing: { "<model-id>": { inputPerMTok: 0, outputPerMTok: 0 } }, reasoningStyle: "openai" },
+  openrouter: { reasoningStyle: "openrouter" },          // cost comes from OpenRouter's usage.cost
+  local: { type: "openai-compatible", baseUrl: "http://localhost:11434/v1", allowUnpriced: true },
+  together: { type: "openai-compatible", baseUrl: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY",
+              pricing: { "<model-id>": { inputPerMTok: 0, outputPerMTok: 0 } } },
+},
+```
+
+- **Cost and budgets.** Cost comes from the provider when it reports it (OpenRouter), otherwise from
+  your `pricing` table (USD per million tokens). The factory doesn't ship prices, because they
+  change. A stage on a provider with neither is a config error unless you set `allowUnpriced: true`,
+  which turns off budget enforcement for that provider.
+- **Effort** is sent only if you opt in with `reasoningStyle` (`"openai"` sends `reasoning_effort`,
+  `"openrouter"` sends `reasoning.effort`), since many models reject it.
+- **Tools.** Non-Claude stages get factory-implemented `Read`, `Write`, `Edit`, `Glob`, `Grep` and
+  `Bash` tools. File tools can't leave the sandbox, even through symlinks. Bash runs in the sandbox
+  (inside the container with `docker`) with every provider and GitHub key removed.
+- **Keys** are read by the factory process and never passed to agents or sandboxes. Model calls
+  come from the host, so the Docker egress allowlist doesn't need the provider's host.
+- **Limitation:** Context7 live docs (MCP) are available to Claude stages only for now.
+- The improver can tune a stage's model, effort and turn limit, but never its provider.
+- The Settings page shows each stage's provider and whether its key is set.
 
 ## Commands
 
@@ -122,6 +163,8 @@ npm test                     # unit + integ + contract (free; ~45 s)
 npm run lint && npm run typecheck
 npm run spec:coverage        # every spec test ID must have a test
 FACTORY_E2E=1 npx vitest run --project e2e   # real Claude; costs money
+# Real OpenAI / OpenRouter run of benchmark issue 1 (T9.8):
+FACTORY_E2E=1 OPENROUTER_API_KEY=... FACTORY_E2E_OPENAI_MODEL=<vendor>/<model> npx vitest run --project e2e test/providers.e2e.test.ts
 ```
 
 Test tiers: **unit** (fakes only), **integ** (real git and sandboxes, scripted agents),

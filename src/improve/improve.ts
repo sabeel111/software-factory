@@ -159,6 +159,7 @@ export async function improve(deps: ImproveDeps): Promise<ImproveReport> {
       outputSchema: RetroOutput,
       cwd: workDir,
       tools: [],
+      provider: deps.retro.provider,
       model: deps.retro.model,
       effort: deps.retro.effort,
       maxBudgetUsd: budget.remaining,

@@ -29,6 +29,17 @@ export default defineConfig({
   // "individual": one draft PR per issue.
   prMode: "integrated",
 
+  // Model providers per stage. Unset stages use Claude ("anthropic"). "openai" and "openrouter" are
+  // presets (keys from OPENAI_API_KEY / OPENROUTER_API_KEY); any OpenAI-compatible API can be added.
+  // stages: {
+  //   triage: { provider: "openrouter", model: "<vendor>/<model>", effort: "low" },
+  //   reviewer: { provider: "openai", model: "<model-id>", effort: "medium" },
+  // },
+  // providers: {
+  //   openai: { pricing: { "<model-id>": { inputPerMTok: 0, outputPerMTok: 0 } } }, // USD per 1M tokens
+  //   local: { type: "openai-compatible", baseUrl: "http://localhost:11434/v1", allowUnpriced: true },
+  // },
+
   // Where self-improvement PRs and factory issues go (optional).
   // selfRepo: "your-org/software-factory",
 });

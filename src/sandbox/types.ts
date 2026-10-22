@@ -48,6 +48,8 @@ export interface AgentRuntime {
   env: Record<string, string>;
   /** Rewrites MCP server configs so they route through the sandbox's gateway. */
   rewriteMcp: (servers: Record<string, unknown>) => Record<string, unknown>;
+  /** Runs an agent's shell command inside the sandbox (factory-implemented Bash tool). */
+  exec?: (cmd: string, opts?: ExecOptions) => Promise<ExecResult>;
 }
 
 export interface Sandbox {

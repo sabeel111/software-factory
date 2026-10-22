@@ -664,6 +664,7 @@ export function SettingsPage(props: { env?: EnvInfo }) {
             <thead>
               <tr>
                 <th>Stage</th>
+                <th>Provider</th>
                 <th>Model</th>
                 <th>Effort</th>
               </tr>
@@ -675,6 +676,7 @@ export function SettingsPage(props: { env?: EnvInfo }) {
                     <span class="stage-dot" style={{ background: `var(--stage-${k})`, marginRight: 6 }} />
                     {k}
                   </td>
+                  <td>{v.provider ?? "anthropic"}</td>
                   <td class="mono">{v.model}</td>
                   <td>{v.effort}</td>
                 </tr>
