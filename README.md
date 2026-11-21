@@ -4,6 +4,13 @@ A self-improving AI software factory. It turns GitHub issues into verified, revi
 integration-ready pull requests, and gets measurably better at it over time. Humans always make the
 merge decision.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/live-floor-dark.png">
+  <img alt="The control UI's Live view: ten issues moving through Triage, Build, Verify, Review, Integrate and Shipped, with spend against budget and four concurrency slots in use" src="docs/images/live-floor.png">
+</picture>
+
+<sub>The control UI in demo mode (<code>factory serve --demo</code>): scripted agents, but a real repo, real sandboxes, real <code>npm test</code> and real merges.</sub>
+
 ```
 GitHub issues ──► Triage ──► Worker ──► Verifier ──► Reviewer ──► Integrator ──► draft PR ──► human merges
  factory:ready   reject      own        clean         reads        merges +
@@ -64,6 +71,14 @@ Open the printed URL (`http://127.0.0.1:4173`). The UI has these views:
 - **Benchmark:** resolve rate per run, a table view, and reference / factory runs.
 - **Improvement:** candidates with hypothesis, gate decision, champion vs candidate scores, PR and revert.
 - **Settings:** the effective config after policy is applied, credential presence, and isolation warnings.
+
+| Issue drawer | History |
+|---|---|
+| ![Issue drawer for #7: stage timeline, acceptance criteria, changes per attempt, verifier output and review verdicts](docs/images/issue-drawer.png) | ![History: every batch, benchmark and improvement run with issues, shipped count, cost and duration](docs/images/history.png) |
+| **Benchmark** | **Improvement** |
+| ![Benchmark: resolve rate over time for all issues and the holdout split, plus reference checks](docs/images/benchmark.png) | ![Improvement: a candidate playbook change, rejected as within the noise band, with champion vs candidate scores](docs/images/improvement.png) |
+| **Settings** | **Phone** |
+| ![Settings: effective config, credential presence, limits, and each stage's provider, model and effort](docs/images/settings.png) | <img alt="The Live view at phone width" src="docs/images/mobile.png" width="260"> |
 
 The server binds to 127.0.0.1. Write actions need a per-session token embedded in the page, and requests from any
 other host or origin are rejected. Everything is driven by one typed event stream (`runs/<batch>/events.jsonl`)
